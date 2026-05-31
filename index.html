@@ -7,6 +7,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,500&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#150f0a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Songbook">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   :root{
     --bg:#150f0a; --bg2:#1e1610; --ember:#ff7e3d; --ember-soft:#f0913f; --amber:#e8b35a;
@@ -221,7 +228,15 @@ async function initShared(){
   const {initializeApp}=await import(`${FB_SDK}/firebase-app.js`);
   const fs=await import(`${FB_SDK}/firebase-firestore.js`);
   const app=initializeApp(firebaseConfig);
-  const db=fs.getFirestore(app);
+  // Offline-capable Firestore: caches data on the device so the list still
+  // loads with no signal, and queues any edits to sync when back online.
+  let db;
+  try{
+    db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});
+  }catch(e){
+    console.warn("Persistent cache unavailable, using memory cache:",e);
+    db=fs.getFirestore(app);
+  }
   fb={db,fs,col:fs.collection(db,"songs")};
   // seed once if database is empty
   const metaRef=fs.doc(db,"meta","init");
@@ -363,13 +378,27 @@ $("clear").onclick=()=>{ activeGenres.clear(); query=""; $("search").value=""; r
 /* ---------- boot ---------- */
 function setMode(m){
   mode=m; const el=$("mode"), t=$("mode-text"), b=$("banner");
-  if(m==="shared"){ el.classList.add("live"); t.textContent="Live \u00b7 shared with everyone"; b.style.display="none"; }
+  if(m==="shared"){ el.classList.add("live"); t.textContent="Live \u00b7 shared with everyone"; b.style.display="none"; updateConn(); }
   else{
     el.classList.remove("live"); t.textContent="Saved on this device";
     b.style.display="block";
     b.innerHTML="<b>Not shared yet.</b> This list only saves on your phone. To make one list everyone edits, add your Firebase keys in the file (see setup notes).";
   }
 }
+function updateConn(){
+  if(mode!=="shared") return;
+  const el=$("mode"), t=$("mode-text");
+  if(navigator.onLine){ el.classList.add("live"); t.textContent="Live \u00b7 shared with everyone"; }
+  else{ el.classList.remove("live"); t.textContent="Offline \u00b7 changes sync when back online"; }
+}
+window.addEventListener("online",updateConn);
+window.addEventListener("offline",updateConn);
+
+// Service worker: lets the page itself open with no signal after the first visit
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+}
+
 (async function boot(){
   if(isConfigured()){
     setMode("shared");
