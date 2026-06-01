@@ -239,6 +239,9 @@ let db;
 try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
 catch(e){ console.warn("cache fallback", e); db = F.getFirestore(app); }
 const auth = A.getAuth(app);
+// Durable session storage so an installed home-screen app stays signed in.
+try { await A.setPersistence(auth, A.indexedDBLocalPersistence); }
+catch(e){ try { await A.setPersistence(auth, A.browserLocalPersistence); } catch(_){} }
 
 /* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
@@ -687,15 +690,23 @@ function renderSignIn(errMsg){
   </div>`;
   $("gsi").onclick=signIn;
 }
+function inStandalone(){
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true;
+}
 async function signIn(){
   const provider=new A.GoogleAuthProvider();
-  try{ await A.signInWithPopup(auth,provider); }
+  provider.setCustomParameters({prompt:'select_account'});
+  try{
+    // Installed home-screen apps can't use popups — go straight to redirect.
+    if(inStandalone()){ await A.signInWithRedirect(auth,provider); return; }
+    await A.signInWithPopup(auth,provider);
+  }
   catch(err){
     console.warn("popup failed",err);
+    if(err && err.code==="auth/popup-closed-by-user") return;
     if(err && (err.code==="auth/popup-blocked"||err.code==="auth/cancelled-popup-request"||err.code==="auth/operation-not-supported-in-this-environment")){
       try{ await A.signInWithRedirect(auth,provider); return; }catch(e2){ renderSignIn(friendlyAuthErr(e2)); return; }
     }
-    if(err && err.code==="auth/popup-closed-by-user") return;
     renderSignIn(friendlyAuthErr(err));
   }
 }
