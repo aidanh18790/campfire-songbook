@@ -154,6 +154,10 @@
   .person .pn{font-weight:600;font-size:16px;}
   .person .pc{color:var(--faint);font-size:13px;margin-top:2px;}
   .person.merow{border-color:rgba(232,179,90,.35);}
+  .padmin{display:flex;gap:6px;flex:0 0 auto;}
+  .minibtn{font-size:12px;font-weight:600;color:var(--muted);background:var(--card-hi);border:1px solid var(--line);border-radius:9px;padding:7px 10px;cursor:pointer;transition:transform .12s;}
+  .minibtn:active{transform:scale(.94);}
+  .minibtn.danger{color:#e89;border-color:rgba(220,96,72,.32);}
 
   .listsec{margin-top:20px;}
   .listsec .lh{display:flex;align-items:center;gap:9px;margin:0 2px 12px;}
@@ -271,7 +275,8 @@ function seedRows(){
 let me=null;                 // {uid,name,color}
 let songs=[], songsMap={}, myLists={}, usersMap={};
 let query="", activeGenres=new Set(), online=navigator.onLine, started=false;
-let detachNotes=null, currentNotes=[];
+let isAdmin=(()=>{try{return localStorage.getItem("cf-admin")==="1";}catch(e){return false;}})();
+let detachNotes=null, currentNotes=[], notesSongId=null, lastSong=null;
 
 function localId(){
   let id=null; try{ id=localStorage.getItem("cf-uid"); }catch(e){}
@@ -289,6 +294,19 @@ function saveProfile(name,color){
   const uid=localId();
   try{ localStorage.setItem("cf-name",name); localStorage.setItem("cf-color",color); }catch(e){}
   me={uid,name,color};
+}
+function setAdmin(on){ isAdmin=on; try{ on?localStorage.setItem("cf-admin","1"):localStorage.removeItem("cf-admin"); }catch(e){} }
+async function sha256(str){ const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str)); return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join(""); }
+async function getAdminHash(){ try{ const d=await F.getDoc(F.doc(db,"meta","admin")); return d.exists()?(d.data().hash||null):null; }catch(e){ return null; } }
+async function setAdminHash(hash){ await F.setDoc(F.doc(db,"meta","admin"),{hash,setBy:me.name,at:F.serverTimestamp()},{merge:true}); }
+async function adminRename(uid,name,color){ await F.setDoc(F.doc(db,"users",uid),{name,color,updatedAt:F.serverTimestamp()},{merge:true}); }
+async function adminRemove(uid){
+  const ls=await F.getDocs(F.collection(db,"users",uid,"lists"));
+  const batch=F.writeBatch(db);
+  ls.docs.forEach(d=>batch.delete(d.ref));
+  songs.forEach(s=>batch.delete(F.doc(db,"songs",s.id,"notes",uid)));
+  batch.delete(F.doc(db,"users",uid));
+  await batch.commit();
 }
 
 /* ============================================================
@@ -355,7 +373,7 @@ function route(){
   return {view:"home"};
 }
 function rerender(){ if(me) render(); }
-window.addEventListener("hashchange",()=>{ if(detachNotes){detachNotes();detachNotes=null;} render(); });
+window.addEventListener("hashchange",()=>{ if(detachNotes){detachNotes();detachNotes=null;notesSongId=null;} render(); });
 window.addEventListener("online",()=>{online=true;render();});
 window.addEventListener("offline",()=>{online=false;render();});
 
@@ -419,6 +437,7 @@ function renderSong(id){
   const s=songsMap[id];
   if(!s){ root.innerHTML=chrome(`<button class="back" data-go="/">&larr; Back</button><div class="empty"><div class="big">Song not found</div>It may have been removed.</div>`,"home"); return; }
   const e=myEntry(id); const L=searchLinks(s.title,s.artist);
+  if(notesSongId!==id) currentNotes=[];
   const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
   const addedLink = s.addedBy && s.addedBy!=="seed" ? `Added by <a data-go="/user/${s.addedBy}">${esc(nameOf(s.addedBy,s.addedByName))}</a>` : `From the original songbook`;
   const myNote = currentNotes.find(n=>n.uid===me.uid);
@@ -439,7 +458,6 @@ function renderSong(id){
     <div class="section"><h3>My lists</h3><div class="mystatus">
       <button class="sbtn todo ${e.status==='todo'?'on':''}" data-set="todo" data-id="${id}">To-Do</button>
       <button class="sbtn known ${e.status==='known'?'on':''}" data-set="known" data-id="${id}">Currently Know</button>
-      ${e.status?`<button class="sbtn" data-set="none" data-id="${id}">Remove</button>`:""}
       <button class="star ${e.starred?'on':''}" data-star="${id}" aria-label="favorite">${starSvg(e.starred)}</button></div></div>
     <div class="section"><h3>Shared notes &amp; links</h3>
       <textarea class="notes" id="commnotes" placeholder="Capo, chords, links&hellip; everyone can edit this.">${esc(s.communalNotes||"")}</textarea>
@@ -450,9 +468,20 @@ function renderSong(id){
       <button class="savenote" id="savemine" disabled>Save my notes</button><span class="savedmsg" id="minesaved"></span></div>
     <div class="section"><h3>Everyone&rsquo;s notes</h3><div class="notefeed">${othersHtml}</div></div>
     <button class="ghostbtn danger" id="delsong">Delete this song from the songbook</button>`;
+  const _cap={comm:(()=>{const el=$("commnotes");return el?el.value:null;})(),mine:(()=>{const el=$("mynotes");return el?el.value:null;})(),
+    focus:document.activeElement&&document.activeElement.id,sel:(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null};
   root.innerHTML=chrome(inner,"home");
-  if(detachNotes){detachNotes();detachNotes=null;}
-  detachNotes=F.onSnapshot(F.collection(db,"songs",id,"notes"),snap=>{ currentNotes=snap.docs.map(d=>({uid:d.id,...d.data()})); const r=route(); if(r.view==="song"&&r.id===id) renderSong(id); });
+  if(lastSong===id){
+    if(_cap.comm!=null){const el=$("commnotes");if(el){el.value=_cap.comm;const sc=$("savecomm");if(sc)sc.disabled=(el.value===(s.communalNotes||""));}}
+    if(_cap.mine!=null){const el=$("mynotes");if(el){el.value=_cap.mine;const sm=$("savemine");if(sm)sm.disabled=(el.value.trim()===(myNote?myNote.text:"").trim());}}
+    if(_cap.focus){const el=$(_cap.focus);if(el){el.focus();if(_cap.sel!=null){try{el.setSelectionRange(_cap.sel,_cap.sel);}catch(e){}}}}
+  }
+  lastSong=id;
+  if(notesSongId!==id){
+    if(detachNotes){detachNotes();detachNotes=null;}
+    notesSongId=id;
+    detachNotes=F.onSnapshot(F.collection(db,"songs",id,"notes"),snap=>{ currentNotes=snap.docs.map(d=>({uid:d.id,...d.data()})); const r=route(); if(r.view==="song"&&r.id===id) renderSong(id); });
+  }
   $("editsong").onclick=()=>openEditSong(id);
   const comm=$("commnotes"), savecomm=$("savecomm");
   comm.addEventListener("input",()=>{ savecomm.disabled = comm.value===(s.communalNotes||""); });
@@ -484,29 +513,32 @@ async function renderUser(uid){
   const inner=`
     <div style="display:flex;align-items:center;gap:14px;margin:16px 2px 6px">${avatar(pname,pcolor,56)}
       <div><div class="ptitle" style="margin:0;font-size:26px">${esc(pname)}${isMe?" (you)":""}</div>
-      <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${todo.length} to learn${isMe?` &middot; <button class="edit-pencil" id="editname" style="font-size:13px">Edit name</button>`:""}</div></div></div>
+      <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${todo.length} to learn${isMe?` &middot; <button class="edit-pencil" id="editname" style="font-size:13px">Edit name</button> &middot; <button class="edit-pencil" id="adminbtn" style="font-size:13px">Admin${isAdmin?" \u2713":""}</button>`:""}</div></div></div>
+    ${(!isMe&&isAdmin)?`<div style="display:flex;gap:8px;margin:0 2px 4px"><button class="minibtn" data-arename="${uid}">Rename</button><button class="minibtn danger" data-aremove="${uid}">Remove person</button></div>`:""}
     ${isMe?"":`<button class="back" data-go="/people" style="padding-top:4px">&larr; All people</button>`}
     ${sec("known","Currently Know",known)}
     ${sec("todo","To-Do",todo)}`;
   root.innerHTML=chrome(inner,"user");
   const en=$("editname"); if(en) en.onclick=openEditName;
+  const ab=$("adminbtn"); if(ab) ab.onclick=openAdminSheet;
 }
 
 function renderPeople(){
   const ids=Object.keys(usersMap);
   ids.sort((a,b)=>(a===me.uid?-1:b===me.uid?1:(usersMap[a].name||"").localeCompare(usersMap[b].name||"")));
   const cards=ids.map(uid=>{ const u=usersMap[uid];
+    const adminActions = isAdmin?`<div class="padmin"><button class="minibtn" data-arename="${uid}">Rename</button>${uid!==me.uid?`<button class="minibtn danger" data-aremove="${uid}">Remove</button>`:""}</div>`:"";
     return `<div class="person ${uid===me.uid?'merow':''}" data-go="/user/${uid}">${avatar(u.name,u.color,42)}
-      <div><div class="pn">${esc(u.name||"Friend")}${uid===me.uid?" (you)":""}</div><div class="pc">View their lists &amp; notes</div></div></div>`;
+      <div style="flex:1;min-width:0"><div class="pn">${esc(u.name||"Friend")}${uid===me.uid?" (you)":""}</div><div class="pc">View their lists &amp; notes</div></div>${adminActions}</div>`;
   }).join("");
-  const inner=`<div class="ptitle">People</div><div class="psub">Tap anyone to see what they know and want to learn</div>
+  const inner=`<div class="ptitle">People</div><div class="psub">Tap anyone to see what they know and want to learn${isAdmin?` &middot; <span style="color:var(--amber)">admin on</span>`:""}</div>
     <div class="list" style="gap:10px">${cards||`<div class="empty"><div class="big">Just you so far</div>Share the link to bring friends around the fire.</div>`}</div>`;
   root.innerHTML=chrome(inner,"people");
 }
 
 function render(){
   const r=route();
-  if(r.view!=="song" && detachNotes){ detachNotes(); detachNotes=null; currentNotes=[]; }
+  if(r.view!=="song" && detachNotes){ detachNotes(); detachNotes=null; notesSongId=null; currentNotes=[]; }
   if(r.view==="home") renderHome();
   else if(r.view==="song") renderSong(r.id);
   else if(r.view==="people") renderPeople();
@@ -516,12 +548,14 @@ function render(){
 
 /* ---------- global clicks ---------- */
 document.addEventListener("click",e=>{
+  const ar=e.target.closest("[data-arename]"); if(ar){ e.stopPropagation(); adminRenameSheet(ar.getAttribute("data-arename")); return; }
+  const arm=e.target.closest("[data-aremove]"); if(arm){ e.stopPropagation(); adminRemoveSheet(arm.getAttribute("data-aremove")); return; }
   const g=e.target.closest("[data-go]"); if(g){ go(g.getAttribute("data-go")); return; }
   if(e.target.closest("[data-back]")){ history.length>1?history.back():go("/"); return; }
   const open=e.target.closest("[data-open]"); if(open){ go("/song/"+open.getAttribute("data-open")); return; }
   const plus=e.target.closest("[data-plus]"); if(plus){ e.stopPropagation(); openListSheet(plus.getAttribute("data-plus")); return; }
   const star=e.target.closest("[data-star]"); if(star){ e.stopPropagation(); toggleStar(star.getAttribute("data-star")); return; }
-  const setb=e.target.closest("[data-set]"); if(setb){ const st=setb.getAttribute("data-set"); setStatus(setb.getAttribute("data-id"), st==="none"?null:st); return; }
+  const setb=e.target.closest("[data-set]"); if(setb){ const st=setb.getAttribute("data-set"); const sid=setb.getAttribute("data-id"); const cur=myEntry(sid).status; setStatus(sid, cur===st?null:st); return; }
   const gen=e.target.closest("[data-genre]"); if(gen){ const v=gen.getAttribute("data-genre"); if(v==="__all")activeGenres.clear(); else{activeGenres.has(v)?activeGenres.delete(v):activeGenres.add(v);} renderHome(); return; }
 });
 
@@ -575,15 +609,57 @@ function openEditSong(id){
     const b=$("esave"); b.disabled=true; b.textContent="Saving\u2026"; await saveSongFields(id,{title:t,artist:a||"Unknown"}); closeSheet(); };
 }
 
-function openEditName(){
-  let color=me.color;
+function nameSheet(targetUid){
+  const isSelf = targetUid===me.uid;
+  const u = isSelf ? {name:me.name,color:me.color} : (usersMap[targetUid]||{name:"",color:colorFor(targetUid)});
+  let color=u.color||colorFor(targetUid);
   const sw=PAL.map(c=>`<button class="swatch ${c===color?'on':''}" data-color="${c}" style="background:${c}"></button>`).join("");
-  openSheet(`<h2>Your name</h2><p class="sh-sub">This is how you show up to everyone</p>
-    <div class="field"><input class="txt" id="n-name" value="${esc(me.name)}" maxlength="24"></div>
+  openSheet(`<h2>${isSelf?"Your name":"Rename person"}</h2><p class="sh-sub">${isSelf?"This is how you show up to everyone":"Admin: change this person's name"}</p>
+    <div class="field"><input class="txt" id="n-name" value="${esc(u.name)}" maxlength="24"></div>
     <div class="swatches">${sw}</div>
     <button class="save" id="nsave">Save</button>`);
   sheet.querySelectorAll("[data-color]").forEach(b=>b.onclick=()=>{ color=b.getAttribute("data-color"); sheet.querySelectorAll(".swatch").forEach(x=>x.classList.toggle("on",x.getAttribute("data-color")===color)); });
-  $("nsave").onclick=async()=>{ const n=$("n-name").value.trim(); if(!n)return; saveProfile(n,color); await ensureProfile(); closeSheet(); render(); };
+  $("nsave").onclick=async()=>{ const n=$("n-name").value.trim(); if(!n)return;
+    if(isSelf){ saveProfile(n,color); await ensureProfile(); } else { await adminRename(targetUid,n,color); }
+    closeSheet(); render(); };
+}
+function openEditName(){ nameSheet(me.uid); }
+function adminRenameSheet(uid){ nameSheet(uid); }
+function adminRemoveSheet(uid){
+  const nm=nameOf(uid,"this person");
+  openSheet(`<h2>Remove ${esc(nm)}?</h2><p class="sh-sub">This deletes their To-Do/Known lists and their notes. Songs they added to the shared list stay.</p>
+    <button class="save" id="rmok" style="background:linear-gradient(180deg,#d9694a 0%,#c0653f 100%);color:#fff">Remove ${esc(nm)}</button>
+    <button class="ghostbtn" id="rmcancel">Cancel</button>`);
+  $("rmcancel").onclick=closeSheet;
+  $("rmok").onclick=async()=>{ const b=$("rmok"); b.disabled=true; b.textContent="Removing\u2026"; try{ await adminRemove(uid); }catch(e){ console.error(e); } closeSheet(); go("/people"); render(); };
+}
+async function openAdminSheet(){
+  openSheet(`<h2>Admin</h2><p class="sh-sub">Checking&hellip;</p>`);
+  if(isAdmin){
+    openSheet(`<h2>Admin mode is on</h2><p class="sh-sub">Open the People tab to rename or remove anyone. Changes apply for everyone.</p>
+      <button class="ghostbtn" id="adminoff">Turn off admin on this device</button>`);
+    $("adminoff").onclick=()=>{ setAdmin(false); closeSheet(); render(); };
+    return;
+  }
+  let hash=null; try{ hash=await getAdminHash(); }catch(e){}
+  if(!hash){
+    openSheet(`<h2>Set up admin</h2><p class="sh-sub">Create an admin passphrase (4+ characters). Anyone who knows it gets admin powers, so keep it to yourself.</p>
+      <div class="field"><label>New passphrase</label><input class="txt" id="a-p1" type="password" autocomplete="new-password"></div>
+      <div class="field"><label>Confirm passphrase</label><input class="txt" id="a-p2" type="password" autocomplete="new-password"></div>
+      <button class="save" id="asetup" disabled>Set passphrase &amp; unlock</button>
+      <div class="savedmsg" id="aerr" style="color:#e89;margin-left:0;display:block;margin-top:10px"></div>`);
+    const v=()=>{ $("asetup").disabled=!($("a-p1").value.length>=4 && $("a-p1").value===$("a-p2").value); };
+    $("a-p1").addEventListener("input",v); $("a-p2").addEventListener("input",v);
+    $("asetup").onclick=async()=>{ const b=$("asetup"); b.disabled=true; b.textContent="Saving\u2026"; const h=await sha256($("a-p1").value); await setAdminHash(h); setAdmin(true); closeSheet(); render(); };
+    return;
+  }
+  openSheet(`<h2>Admin access</h2><p class="sh-sub">Enter the admin passphrase to unlock management tools on this device.</p>
+    <div class="field"><input class="txt" id="a-p" type="password" autocomplete="current-password" placeholder="Passphrase"></div>
+    <button class="save" id="aunlock">Unlock</button>
+    <div class="savedmsg" id="aerr" style="color:#e89;margin-left:0;display:block;margin-top:10px"></div>`);
+  const tryUnlock=async()=>{ const h=await sha256($("a-p").value); if(h===hash){ setAdmin(true); closeSheet(); render(); } else { $("aerr").textContent="That passphrase didn't match."; } };
+  $("aunlock").onclick=tryUnlock;
+  $("a-p").addEventListener("keydown",ev=>{ if(ev.key==="Enter"){ev.preventDefault();tryUnlock();} });
 }
 
 /* ============================================================
