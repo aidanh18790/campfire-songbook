@@ -20,6 +20,7 @@
     --cream:#f6ecdb; --muted:#b6a48d; --faint:#7c6e5c;
     --card:rgba(255,240,220,0.045); --card-hi:rgba(255,240,220,0.08);
     --line:rgba(246,236,219,0.10); --line-hi:rgba(246,236,219,0.22);
+    --todo:#e8b35a; --known:#8fc06a;
     --g-folk:#9aab5e; --g-country:#e0a23e; --g-pop:#e57b9c;
     --g-rock:#dd6048; --g-bluegrass:#56a290; --g-grunge:#8a8ea6;
     --g-blues:#5c84b1; --g-granola:#c8a86a; --g-other:#f0913f;
@@ -33,137 +34,189 @@
       radial-gradient(80% 50% at 50% 120%, rgba(232,179,90,0.30) 0%, rgba(232,179,90,0) 55%),
       linear-gradient(180deg, #120c07 0%, var(--bg) 38%, var(--bg2) 100%);
     animation:flicker 5.5s ease-in-out infinite;}
-  @keyframes flicker{0%,100%{opacity:.92;transform:scale(1);}25%{opacity:1;transform:scale(1.015);}50%{opacity:.86;transform:scale(.995);}72%{opacity:.97;transform:scale(1.01);}}
+  @keyframes flicker{0%,100%{opacity:.92;}25%{opacity:1;}50%{opacity:.86;}72%{opacity:.97;}}
   body::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.05;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
-  .wrap{position:relative;z-index:2;max-width:680px;margin:0 auto;padding:0 18px 140px;}
-  header{padding:34px 2px 18px;text-align:center;}
-  .flame{display:inline-block;width:30px;height:38px;margin-bottom:6px;transform-origin:bottom center;animation:sway 3.2s ease-in-out infinite;}
-  @keyframes sway{0%,100%{transform:rotate(-3deg) scaleY(1);}50%{transform:rotate(3deg) scaleY(1.05);}}
-  h1{font-family:'Fraunces',serif;font-weight:800;font-size:38px;line-height:1;margin:0;letter-spacing:-0.02em;
-    background:linear-gradient(180deg,var(--cream) 0%,var(--amber) 130%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
-  .sub{color:var(--muted);font-size:14px;margin-top:8px;letter-spacing:.02em;}
-  .sub b{color:var(--ember-soft);font-weight:600;}
-  .mode{display:inline-flex;align-items:center;gap:7px;margin-top:12px;font-size:12px;font-weight:600;
-    letter-spacing:.03em;padding:5px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:var(--card);}
-  .mode .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);}
-  .mode.live{color:#bfe0b0;border-color:rgba(120,190,110,.35);}
-  .mode.live .dot{background:#7ec96a;box-shadow:0 0 8px #7ec96a;animation:pulse 2s ease-in-out infinite;}
-  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
-  .banner{background:color-mix(in srgb,var(--amber) 12%,transparent);border:1px solid color-mix(in srgb,var(--amber) 30%,transparent);
-    border-radius:14px;padding:13px 15px;margin:18px 0 0;font-size:13.5px;line-height:1.5;color:var(--cream);}
-  .banner b{color:var(--amber);}
-  .searchbar{position:relative;margin:22px 0 14px;}
+  .wrap{position:relative;z-index:2;max-width:680px;margin:0 auto;padding:0 18px 96px;}
+  a{color:var(--ember-soft);}
+  button{font-family:inherit;}
+
+  /* top bar */
+  .topbar{position:relative;z-index:2;max-width:680px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:16px 18px 6px;}
+  .brand{display:flex;align-items:center;gap:9px;cursor:pointer;}
+  .brand .flame{width:20px;height:25px;}
+  .brand .name{font-family:'Fraunces',serif;font-weight:700;font-size:20px;letter-spacing:-.01em;
+    background:linear-gradient(180deg,var(--cream) 0%,var(--amber) 140%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  .me{display:flex;align-items:center;gap:8px;}
+  .avatar{width:30px;height:30px;border-radius:50%;background:var(--card-hi);object-fit:cover;border:1px solid var(--line);}
+  .conn{width:8px;height:8px;border-radius:50%;background:var(--faint);}
+  .conn.live{background:#7ec96a;box-shadow:0 0 8px #7ec96a;}
+
+  /* headings */
+  .ptitle{font-family:'Fraunces',serif;font-weight:800;font-size:30px;line-height:1.05;margin:14px 2px 4px;letter-spacing:-.02em;}
+  .psub{color:var(--muted);font-size:13.5px;margin:0 2px 16px;}
+
+  /* search + filters */
+  .searchbar{position:relative;margin:14px 0 12px;}
   .searchbar svg{position:absolute;left:16px;top:50%;transform:translateY(-50%);opacity:.5;}
-  #search{width:100%;font-family:inherit;font-size:16px;color:var(--cream);background:var(--card);border:1px solid var(--line);
-    border-radius:16px;padding:15px 16px 15px 46px;outline:none;transition:border-color .2s,background .2s;}
+  #search{width:100%;font-size:16px;color:var(--cream);background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px 14px 46px;outline:none;transition:border-color .2s,background .2s;}
   #search::placeholder{color:var(--faint);}
   #search:focus{border-color:var(--line-hi);background:var(--card-hi);}
   .filters{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;margin:0 -2px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
   .filters::-webkit-scrollbar{display:none;}
-  .chip{flex:0 0 auto;font-family:inherit;font-size:13.5px;font-weight:600;color:var(--muted);background:var(--card);
-    border:1px solid var(--line);padding:8px 14px;border-radius:999px;white-space:nowrap;cursor:pointer;transition:all .18s ease;display:flex;align-items:center;gap:7px;}
-  .chip .dot{width:8px;height:8px;border-radius:50%;background:var(--gc,var(--g-other));flex:0 0 auto;}
+  .chip{flex:0 0 auto;font-size:13px;font-weight:600;color:var(--muted);background:var(--card);border:1px solid var(--line);padding:7px 13px;border-radius:999px;white-space:nowrap;cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:7px;}
+  .chip .dot{width:8px;height:8px;border-radius:50%;background:var(--gc,var(--g-other));}
   .chip.on{color:#1a120b;border-color:transparent;background:var(--gc,var(--ember));}
   .chip.on .dot{background:rgba(20,14,8,.45);}
-  .chip.all{color:var(--cream);}
-  .chip.all.on{background:var(--cream);color:#1a120b;}
-  .meta{display:flex;justify-content:space-between;align-items:baseline;color:var(--faint);font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;padding:4px 2px 10px;}
+  .chip.all{color:var(--cream);} .chip.all.on{background:var(--cream);color:#1a120b;}
+  .meta{display:flex;justify-content:space-between;align-items:baseline;color:var(--faint);font-size:12px;letter-spacing:.04em;text-transform:uppercase;padding:2px 2px 10px;}
   .meta .clear{color:var(--ember-soft);cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;display:none;}
   .meta .clear.show{display:inline;}
+
+  /* song rows */
   .list{display:flex;flex-direction:column;gap:10px;}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 16px;display:flex;align-items:flex-start;gap:12px;
-    animation:rise .45s cubic-bezier(.2,.7,.3,1) backwards;transition:border-color .2s,background .2s,transform .12s;}
-  .card:active{transform:scale(.992);}
-  @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
-  .star{flex:0 0 auto;width:30px;height:30px;border-radius:50%;border:none;background:transparent;cursor:pointer;display:grid;place-items:center;margin-top:-1px;color:var(--faint);transition:color .2s,transform .2s;}
-  .star:active{transform:scale(.85);}
-  .star.on{color:var(--amber);}
-  .info{flex:1;min-width:0;}
-  .title{font-family:'Fraunces',serif;font-weight:600;font-size:18.5px;line-height:1.2;letter-spacing:-.01em;}
-  .artist{color:var(--muted);font-size:14px;margin-top:3px;}
-  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
-  .tag{font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:3px 9px;border-radius:7px;color:var(--tc,var(--g-other));
-    background:color-mix(in srgb,var(--tc,var(--g-other)) 15%,transparent);border:1px solid color-mix(in srgb,var(--tc,var(--g-other)) 32%,transparent);}
-  .del{flex:0 0 auto;width:30px;height:30px;border:none;background:transparent;color:var(--faint);cursor:pointer;border-radius:8px;opacity:.45;font-size:18px;display:grid;place-items:center;transition:opacity .2s,color .2s;}
-  .del:active{color:var(--ember);opacity:1;}
-  .del.confirm{color:var(--ember);opacity:1;font-size:11px;font-weight:700;letter-spacing:.04em;width:auto;padding:0 8px;text-transform:uppercase;}
-  .empty{text-align:center;padding:60px 20px;color:var(--faint);}
-  .empty .big{font-family:'Fraunces',serif;font-size:22px;color:var(--muted);margin-bottom:6px;}
-  .fab{position:fixed;z-index:20;left:50%;bottom:26px;transform:translateX(-50%);background:linear-gradient(180deg,var(--ember) 0%,#e8662c 100%);
-    color:#241006;font-family:inherit;font-weight:700;font-size:16px;border:none;border-radius:999px;padding:15px 26px;cursor:pointer;display:flex;align-items:center;gap:9px;
-    box-shadow:0 8px 30px rgba(255,110,45,.4),0 2px 0 rgba(255,200,160,.3) inset;transition:transform .15s,box-shadow .2s;}
+  .row{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:11px;transition:border-color .2s,background .2s,transform .1s;}
+  .row:active{transform:scale(.993);}
+  .plus{flex:0 0 auto;width:34px;height:34px;border-radius:11px;border:1px solid var(--line);background:var(--card-hi);color:var(--cream);font-size:20px;cursor:pointer;display:grid;place-items:center;transition:all .15s;}
+  .plus:active{transform:scale(.9);}
+  .plus.has{background:var(--ember);border-color:transparent;color:#241006;}
+  .rowmain{flex:1;min-width:0;cursor:pointer;}
+  .rowtitle{font-family:'Fraunces',serif;font-weight:600;font-size:17px;line-height:1.2;letter-spacing:-.01em;}
+  .rowartist{color:var(--muted);font-size:13.5px;margin-top:2px;}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;align-items:center;}
+  .pill{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:6px;}
+  .pill.todo{color:#241a06;background:var(--todo);}
+  .pill.known{color:#14210b;background:var(--known);}
+  .tag{font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 8px;border-radius:6px;color:var(--tc,var(--g-other));background:color-mix(in srgb,var(--tc,var(--g-other)) 15%,transparent);border:1px solid color-mix(in srgb,var(--tc,var(--g-other)) 30%,transparent);}
+  .star{flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:none;background:transparent;cursor:pointer;display:grid;place-items:center;color:var(--faint);transition:color .2s,transform .2s;}
+  .star:active{transform:scale(.85);} .star.on{color:var(--amber);}
+
+  .empty{text-align:center;padding:54px 20px;color:var(--faint);}
+  .empty .big{font-family:'Fraunces',serif;font-size:21px;color:var(--muted);margin-bottom:6px;}
+  .loading{text-align:center;padding:70px 20px;color:var(--faint);font-size:15px;}
+
+  /* FAB */
+  .fab{position:fixed;z-index:25;left:50%;bottom:86px;transform:translateX(-50%);background:linear-gradient(180deg,var(--ember) 0%,#e8662c 100%);
+    color:#241006;font-weight:700;font-size:15px;border:none;border-radius:999px;padding:13px 22px;cursor:pointer;display:flex;align-items:center;gap:8px;
+    box-shadow:0 8px 26px rgba(255,110,45,.4),0 2px 0 rgba(255,200,160,.3) inset;transition:transform .15s;}
   .fab:active{transform:translateX(-50%) scale(.95);}
-  .fab svg{margin-top:-1px;}
-  .scrim{position:fixed;inset:0;z-index:30;background:rgba(8,5,3,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .28s;}
+
+  /* bottom nav */
+  .nav{position:fixed;z-index:24;left:0;right:0;bottom:0;background:rgba(20,14,9,.86);backdrop-filter:blur(14px);border-top:1px solid var(--line);
+    display:flex;max-width:680px;margin:0 auto;padding:8px 0 calc(8px + env(safe-area-inset-bottom));}
+  .nav button{flex:1;background:none;border:none;color:var(--faint);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;letter-spacing:.02em;padding:4px;transition:color .2s;}
+  .nav button.on{color:var(--ember-soft);}
+  .nav .navav{width:22px;height:22px;border-radius:50%;object-fit:cover;border:1px solid var(--line);}
+
+  /* sign in */
+  .signin{position:relative;z-index:2;max-width:420px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 26px;}
+  .signin .flame{width:54px;height:68px;margin-bottom:14px;}
+  .signin h1{font-family:'Fraunces',serif;font-weight:800;font-size:40px;margin:0;letter-spacing:-.02em;
+    background:linear-gradient(180deg,var(--cream) 0%,var(--amber) 130%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  .signin p{color:var(--muted);font-size:15px;line-height:1.5;margin:14px 0 30px;}
+  .gbtn{display:flex;align-items:center;gap:12px;background:#fff;color:#1f1f1f;font-weight:600;font-size:16px;border:none;border-radius:14px;padding:14px 22px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.3);transition:transform .12s;}
+  .gbtn:active{transform:scale(.97);}
+  .signin .err{color:#e88;font-size:13.5px;margin-top:18px;max-width:320px;}
+
+  /* detail page */
+  .back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);background:none;border:none;font-size:14.5px;font-weight:600;cursor:pointer;padding:14px 2px 6px;}
+  .dhead{margin:6px 2px 4px;}
+  .dtitle{font-family:'Fraunces',serif;font-weight:800;font-size:30px;line-height:1.1;letter-spacing:-.02em;}
+  .dartist{color:var(--muted);font-size:16px;margin-top:4px;}
+  .dadded{color:var(--faint);font-size:12.5px;margin-top:8px;}
+  .dadded a{color:var(--ember-soft);text-decoration:none;font-weight:600;}
+  .dtags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
+  .section{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-top:14px;}
+  .section h3{font-family:'Fraunces',serif;font-weight:600;font-size:17px;margin:0 0 12px;letter-spacing:-.01em;}
+  .listen{display:flex;gap:10px;}
+  .listen a{flex:1;display:flex;align-items:center;justify-content:center;gap:9px;text-decoration:none;font-weight:600;font-size:14.5px;border-radius:12px;padding:13px;border:1px solid var(--line);transition:transform .12s,background .2s;}
+  .listen a:active{transform:scale(.97);}
+  .listen .spotify{background:rgba(30,215,96,.13);color:#5fe39a;border-color:rgba(30,215,96,.3);}
+  .listen .apple{background:rgba(250,90,120,.13);color:#ff8aa3;border-color:rgba(250,90,120,.3);}
+  .mystatus{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .sbtn{font-weight:600;font-size:14px;border-radius:11px;padding:11px 15px;cursor:pointer;border:1px solid var(--line);background:var(--card-hi);color:var(--cream);transition:transform .12s,background .2s;}
+  .sbtn:active{transform:scale(.96);}
+  .sbtn.todo.on{background:var(--todo);color:#241a06;border-color:transparent;}
+  .sbtn.known.on{background:var(--known);color:#14210b;border-color:transparent;}
+  textarea.notes{width:100%;font-family:inherit;font-size:15px;line-height:1.5;color:var(--cream);background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:12px;padding:13px;outline:none;resize:vertical;min-height:78px;transition:border-color .2s;}
+  textarea.notes:focus{border-color:var(--ember-soft);}
+  .savenote{margin-top:10px;font-weight:700;font-size:14px;color:#241006;background:linear-gradient(180deg,var(--amber) 0%,#d99b3c 100%);border:none;border-radius:11px;padding:11px 18px;cursor:pointer;transition:transform .12s,opacity .2s;}
+  .savenote:active{transform:scale(.97);} .savenote:disabled{opacity:.4;}
+  .savedmsg{color:var(--known);font-size:13px;margin-left:10px;font-weight:600;}
+  .commnote{white-space:pre-wrap;font-size:15px;line-height:1.55;color:var(--cream);word-break:break-word;}
+  .commnote.empty-note{color:var(--faint);font-style:italic;}
+  .editedby{color:var(--faint);font-size:12px;margin-top:8px;}
+  .notefeed{display:flex;flex-direction:column;gap:12px;margin-top:6px;}
+  .noteitem{border-top:1px solid var(--line);padding-top:12px;}
+  .noteitem:first-child{border-top:none;padding-top:0;}
+  .notewho{display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;}
+  .notewho img{width:22px;height:22px;border-radius:50%;object-fit:cover;border:1px solid var(--line);}
+  .notewho .nm{font-weight:600;font-size:13.5px;color:var(--cream);}
+  .notetext{white-space:pre-wrap;font-size:14.5px;line-height:1.5;color:var(--muted);word-break:break-word;}
+  .ghostbtn{width:100%;margin-top:14px;background:none;border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:14px;border-radius:12px;padding:13px;cursor:pointer;transition:color .2s,border-color .2s;}
+  .ghostbtn.danger:active{color:var(--ember);border-color:var(--ember);}
+  .editfield{width:100%;font-family:'Fraunces',serif;font-size:24px;font-weight:700;color:var(--cream);background:rgba(0,0,0,.2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;outline:none;margin-bottom:9px;}
+  .editfield.sm{font-family:inherit;font-size:16px;font-weight:400;}
+  .editrow{display:flex;gap:9px;margin-top:6px;}
+  .editrow button{flex:1;font-weight:600;font-size:14px;border-radius:11px;padding:11px;cursor:pointer;border:none;}
+  .editrow .cancel{background:var(--card-hi);color:var(--muted);border:1px solid var(--line);}
+  .editrow .ok{background:linear-gradient(180deg,var(--amber) 0%,#d99b3c 100%);color:#241006;}
+  .edit-pencil{background:none;border:none;color:var(--faint);cursor:pointer;font-size:13px;font-weight:600;padding:4px 0;}
+
+  /* people */
+  .person{display:flex;align-items:center;gap:13px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px 15px;cursor:pointer;transition:border-color .2s,transform .1s;}
+  .person:active{transform:scale(.99);}
+  .person img{width:42px;height:42px;border-radius:50%;object-fit:cover;border:1px solid var(--line);}
+  .person .pn{font-weight:600;font-size:16px;}
+  .person .pc{color:var(--faint);font-size:13px;margin-top:2px;}
+  .person.merow{border-color:rgba(232,179,90,.35);}
+
+  /* personal page sections */
+  .listsec{margin-top:20px;}
+  .listsec .lh{display:flex;align-items:center;gap:9px;margin:0 2px 12px;}
+  .listsec .lh .dot{width:10px;height:10px;border-radius:50%;}
+  .listsec.todo .lh .dot{background:var(--todo);}
+  .listsec.known .lh .dot{background:var(--known);}
+  .listsec .lh h2{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin:0;letter-spacing:-.01em;}
+  .listsec .lh .ct{color:var(--faint);font-size:13px;font-weight:600;}
+
+  /* sheets */
+  .scrim{position:fixed;inset:0;z-index:60;background:rgba(8,5,3,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .28s;}
   .scrim.open{opacity:1;pointer-events:auto;}
-  .sheet{position:fixed;z-index:40;left:0;right:0;bottom:0;background:linear-gradient(180deg,#241a12 0%,#1b130c 100%);
-    border-top:1px solid var(--line-hi);border-radius:26px 26px 0 0;padding:10px 20px calc(26px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;
+  .sheet{position:fixed;z-index:70;left:0;right:0;bottom:0;background:linear-gradient(180deg,#241a12 0%,#1b130c 100%);border-top:1px solid var(--line-hi);
+    border-radius:26px 26px 0 0;padding:10px 20px calc(26px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;
     transform:translateY(102%);transition:transform .34s cubic-bezier(.2,.8,.2,1);box-shadow:0 -20px 60px rgba(0,0,0,.5);max-height:90vh;overflow-y:auto;}
   .sheet.open{transform:translateY(0);}
   .grip{width:40px;height:4px;border-radius:2px;background:var(--line-hi);margin:6px auto 16px;}
-  .sheet h2{font-family:'Fraunces',serif;font-weight:600;font-size:24px;margin:0 0 18px;letter-spacing:-.01em;}
-  label{display:block;font-size:12.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;}
+  .sheet h2{font-family:'Fraunces',serif;font-weight:600;font-size:22px;margin:0 0 4px;letter-spacing:-.01em;}
+  .sheet .sh-sub{color:var(--muted);font-size:13.5px;margin:0 0 18px;}
+  .opt{width:100%;display:flex;align-items:center;gap:12px;text-align:left;font-weight:600;font-size:16px;color:var(--cream);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px;margin-bottom:10px;cursor:pointer;transition:transform .12s,background .2s;}
+  .opt:active{transform:scale(.98);}
+  .opt .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:0 0 auto;}
+  .opt.todo .ic{background:var(--todo);color:#241a06;} .opt.known .ic{background:var(--known);color:#14210b;}
+  .opt.remove{color:#e89;} .opt.remove .ic{background:rgba(220,96,72,.2);color:#e89;}
+  .opt.on{border-color:var(--amber);}
+  label{display:block;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;}
   .field{margin-bottom:18px;}
-  input.txt{width:100%;font-family:inherit;font-size:16px;color:var(--cream);background:var(--card);border:1px solid var(--line);border-radius:13px;padding:14px;outline:none;transition:border-color .2s;}
-  input.txt::placeholder{color:var(--faint);}
-  input.txt:focus{border-color:var(--ember-soft);}
+  input.txt{width:100%;font-size:16px;color:var(--cream);background:var(--card);border:1px solid var(--line);border-radius:13px;padding:14px;outline:none;transition:border-color .2s;}
+  input.txt::placeholder{color:var(--faint);} input.txt:focus{border-color:var(--ember-soft);}
   .gpick{display:flex;flex-wrap:wrap;gap:8px;}
-  .gpick .chip{flex:0 0 auto;}
   .newg{display:flex;gap:8px;margin-top:10px;}
   .newg input{flex:1;font-size:15px;padding:11px 13px;}
-  .newg button{font-family:inherit;font-weight:600;font-size:14px;color:var(--cream);background:var(--card-hi);border:1px solid var(--line);border-radius:11px;padding:0 16px;cursor:pointer;}
-  .save{width:100%;font-family:inherit;font-weight:700;font-size:17px;color:#241006;background:linear-gradient(180deg,var(--amber) 0%,#d99b3c 100%);
-    border:none;border-radius:14px;padding:16px;cursor:pointer;margin-top:6px;box-shadow:0 4px 16px rgba(232,179,90,.25);transition:transform .12s,opacity .2s;}
-  .save:active{transform:scale(.985);}
-  .save:disabled{opacity:.4;}
-  .loading{text-align:center;padding:80px 20px;color:var(--faint);font-size:15px;}
+  .newg button{font-weight:600;font-size:14px;color:var(--cream);background:var(--card-hi);border:1px solid var(--line);border-radius:11px;padding:0 16px;cursor:pointer;}
+  .save{width:100%;font-weight:700;font-size:17px;color:#241006;background:linear-gradient(180deg,var(--amber) 0%,#d99b3c 100%);border:none;border-radius:14px;padding:16px;cursor:pointer;margin-top:6px;transition:transform .12s,opacity .2s;}
+  .save:active{transform:scale(.985);} .save:disabled{opacity:.4;}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <svg class="flame" viewBox="0 0 30 38" fill="none">
-      <path d="M15 1C16 9 23 11 23 21c0 6-3.6 10-8 10s-8-4-8-10c0-4 2-6 3-8 .5 3 2 4 3 4-1-4 1-9 2-16Z" fill="url(#fg)"/>
-      <path d="M15 14c1 4 4 5 4 9 0 3-1.8 5-4 5s-4-2-4-5c0-2 1-3 2-4 .3 1.5 1.2 2 2 2-.6-2 0-5 0-7Z" fill="#ffe09a"/>
-      <defs><linearGradient id="fg" x1="15" y1="1" x2="15" y2="31" gradientUnits="userSpaceOnUse"><stop stop-color="#ffd24a"/><stop offset="1" stop-color="#ff6a2b"/></linearGradient></defs>
-    </svg>
-    <h1>Campfire Songbook</h1>
-    <p class="sub"><span id="count">&mdash;</span> songs &middot; tap <b>+ Add</b> to grow the list</p>
-    <div class="mode" id="mode"><span class="dot"></span><span id="mode-text">Connecting&hellip;</span></div>
-    <div class="banner" id="banner" style="display:none"></div>
-  </header>
-  <div class="searchbar">
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
-    <input id="search" type="text" placeholder="Search songs or artists&hellip;" autocomplete="off">
-  </div>
-  <div class="filters" id="filters"></div>
-  <div class="meta"><span id="showing">All songs</span><span class="clear" id="clear">Clear filters</span></div>
-  <div class="list" id="list"><div class="loading">Gathering round the fire&hellip;</div></div>
-</div>
-<button class="fab" id="fab">
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>
-  Add a Song
-</button>
+<div id="root"><div class="loading">Lighting the fire&hellip;</div></div>
+
 <div class="scrim" id="scrim"></div>
-<div class="sheet" id="sheet">
-  <div class="grip"></div>
-  <h2>Add a song</h2>
-  <div class="field"><label>Song title</label><input class="txt" id="f-title" type="text" placeholder="e.g. Wagon Wheel" autocomplete="off"></div>
-  <div class="field"><label>Artist</label><input class="txt" id="f-artist" type="text" placeholder="e.g. Darius Rucker" autocomplete="off"></div>
-  <div class="field"><label>Genres (tap any that fit)</label><div class="gpick" id="gpick"></div>
-    <div class="newg"><input class="txt" id="f-newg" type="text" placeholder="Add a new genre&hellip;" autocomplete="off"><button id="addg">Add</button></div>
-  </div>
-  <button class="save" id="save" disabled>Add to songbook</button>
-</div>
+<div class="sheet" id="sheet"></div>
 
 <script type="module">
 /* ============================================================
-   FIREBASE SETUP  —  EDIT ONLY THIS BLOCK
-   1. Create a free Firebase project (console.firebase.google.com)
-   2. Add a Web App, enable Cloud Firestore
-   3. Copy your config values over the placeholders below
-   Until you do, the app runs in "this device only" mode.
+   FIREBASE  —  config from your project
    ============================================================ */
 const firebaseConfig = {
   apiKey: "AIzaSyAt4YQQr-SNp_KszD1m1JFWIV5ftEsHuqA",
@@ -175,15 +228,37 @@ const firebaseConfig = {
   measurementId: "G-F8QXGG04R3"
 };
 const FB_SDK = "https://www.gstatic.com/firebasejs/12.14.0";
-/* ===================== END EDIT BLOCK ===================== */
 
+/* ---------- imports ---------- */
+const { initializeApp } = await import(`${FB_SDK}/firebase-app.js`);
+const A = await import(`${FB_SDK}/firebase-auth.js`);
+const F = await import(`${FB_SDK}/firebase-firestore.js`);
+
+const app = initializeApp(firebaseConfig);
+let db;
+try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
+catch(e){ console.warn("cache fallback", e); db = F.getFirestore(app); }
+const auth = A.getAuth(app);
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const root = $("root");
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function linkify(t){
+  return esc(t).replace(/(https?:\/\/[^\s]+)/g, u=>`<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+}
 const GENRE_COLORS={Folk:"--g-folk",Country:"--g-country",Pop:"--g-pop",Rock:"--g-rock",Bluegrass:"--g-bluegrass",Grunge:"--g-grunge",Blues:"--g-blues",Granola:"--g-granola"};
 const gcolor=n=>GENRE_COLORS[n]?`var(${GENRE_COLORS[n]})`:"var(--g-other)";
-const $=id=>document.getElementById(id);
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const FLAME=`<svg class="flame" viewBox="0 0 30 38" fill="none"><path d="M15 1C16 9 23 11 23 21c0 6-3.6 10-8 10s-8-4-8-10c0-4 2-6 3-8 .5 3 2 4 3 4-1-4 1-9 2-16Z" fill="url(#fg)"/><path d="M15 14c1 4 4 5 4 9 0 3-1.8 5-4 5s-4-2-4-5c0-2 1-3 2-4 .3 1.5 1.2 2 2 2-.6-2 0-5 0-7Z" fill="#ffe09a"/><defs><linearGradient id="fg" x1="15" y1="1" x2="15" y2="31" gradientUnits="userSpaceOnUse"><stop stop-color="#ffd24a"/><stop offset="1" stop-color="#ff6a2b"/></linearGradient></defs></svg>`;
+const starSvg = on => `<svg width="20" height="20" viewBox="0 0 20 20" fill="${on?'currentColor':'none'}" stroke="currentColor" stroke-width="1.6"><path d="M10 1.8l2.5 5.1 5.6.8-4 4 .95 5.6L10 14.7 4.9 17.3l1-5.6-4-4 5.6-.8z"/></svg>`;
+const searchLinks = (title,artist)=>{
+  const q=encodeURIComponent(`${title} ${artist}`.trim());
+  return { spotify:`https://open.spotify.com/search/${q}`, apple:`https://music.apple.com/search?term=${q}` };
+};
 
-function seed(){
-  const raw=[
+/* ---------- seed ---------- */
+function seedRows(){
+  return [
     ["Take Me Home Country Roads","John Denver","Folk,Country"],["Yellow","Coldplay","Pop"],
     ["Wagon Wheel","Darius Rucker","Country"],["Upside Down","Jack Johnson","Folk,Pop"],
     ["Sweet Home Alabama","Lynyrd Skynyrd","Rock"],["Hotel California","The Eagles","Rock"],
@@ -210,80 +285,152 @@ function seed(){
     ["Black","Pearl Jam","Rock,Grunge"],["Interstate Love Song","Stone Temple Pilots","Rock,Grunge"],
     ["Plush","Stone Temple Pilots","Rock,Grunge"]
   ];
-  return raw.map((r,i)=>({title:r[0],artist:r[1],genres:r[2].split(",").map(g=>g.trim()).filter(Boolean),learned:false,sortKey:i}));
 }
 
-/* ---------- state ---------- */
-let songs=[];
+/* ============================================================
+   STATE
+   ============================================================ */
+let me=null;                 // {uid,name,photo,email}
+let songs=[];                // [{id,title,artist,genres,sortKey,addedBy,addedByName,communalNotes,communalBy}]
+let songsMap={};
+let myLists={};              // songId -> {status:'todo'|'known'|null, starred:bool}
+let usersMap={};             // uid -> {name,photo,email}
 let query="";
 let activeGenres=new Set();
-let pickGenres=new Set();
-let mode="local";            // "shared" | "local"
-let fb=null;                 // firebase refs when shared
+let online=navigator.onLine;
+let started=false;
+let detachNotes=null;
+let currentNotes=[];
 
-const isConfigured=()=>firebaseConfig.apiKey && !/^YOUR_/.test(firebaseConfig.apiKey) && !/^YOUR_/.test(firebaseConfig.projectId);
+/* ============================================================
+   DATA OPS
+   ============================================================ */
+async function ensureProfile(u){
+  const ref=F.doc(db,"users",u.uid);
+  await F.setDoc(ref,{name:u.displayName||"Friend",photo:u.photoURL||"",email:u.email||"",joinedAt:F.serverTimestamp()},{merge:true});
+}
+async function ensureSeed(){
+  const metaRef=F.doc(db,"meta","init");
+  const snap=await F.getDoc(metaRef);
+  if(snap.exists()) return;
+  const batch=F.writeBatch(db);
+  seedRows().forEach((r,i)=>{
+    const ref=F.doc(F.collection(db,"songs"));
+    batch.set(ref,{title:r[0],artist:r[1],genres:r[2].split(",").map(g=>g.trim()),sortKey:i,addedBy:"seed",addedByName:"Songbook",communalNotes:""});
+  });
+  batch.set(metaRef,{seeded:true,at:F.serverTimestamp()});
+  await batch.commit();
+}
+async function addSong(title,artist,genres){
+  await F.addDoc(F.collection(db,"songs"),{title,artist,genres,sortKey:Date.now(),addedBy:me.uid,addedByName:me.name,communalNotes:""});
+}
+async function deleteSong(id){ await F.deleteDoc(F.doc(db,"songs",id)); }
+async function saveSongFields(id,fields){ await F.updateDoc(F.doc(db,"songs",id),fields); }
+async function saveCommunal(id,text){ await F.updateDoc(F.doc(db,"songs",id),{communalNotes:text,communalBy:me.name,communalAt:F.serverTimestamp()}); }
+async function savePersonalNote(songId,text){
+  const ref=F.doc(db,"songs",songId,"notes",me.uid);
+  if(text.trim()) await F.setDoc(ref,{text:text.trim(),name:me.name,photo:me.photo,uid:me.uid,updatedAt:F.serverTimestamp()});
+  else await F.deleteDoc(ref).catch(()=>{});
+}
+function myEntry(id){ return myLists[id]||{status:null,starred:false}; }
+async function setStatus(songId,status){
+  const ref=F.doc(db,"users",me.uid,"lists",songId);
+  const cur=myEntry(songId);
+  if(status===null){
+    if(cur.starred) await F.setDoc(ref,{status:null,starred:true,updatedAt:F.serverTimestamp()});
+    else await F.deleteDoc(ref).catch(()=>{});
+  } else {
+    await F.setDoc(ref,{status,starred:cur.starred||false,updatedAt:F.serverTimestamp()},{merge:true});
+  }
+}
+async function toggleStar(songId){
+  const ref=F.doc(db,"users",me.uid,"lists",songId);
+  const cur=myEntry(songId);
+  const next=!cur.starred;
+  if(!next && !cur.status) await F.deleteDoc(ref).catch(()=>{});
+  else await F.setDoc(ref,{status:cur.status||null,starred:next,updatedAt:F.serverTimestamp()},{merge:true});
+}
 
-/* ---------- data layer ---------- */
-async function initShared(){
-  const {initializeApp}=await import(`${FB_SDK}/firebase-app.js`);
-  const fs=await import(`${FB_SDK}/firebase-firestore.js`);
-  const app=initializeApp(firebaseConfig);
-  // Offline-capable Firestore: caches data on the device so the list still
-  // loads with no signal, and queues any edits to sync when back online.
-  let db;
-  try{
-    db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});
-  }catch(e){
-    console.warn("Persistent cache unavailable, using memory cache:",e);
-    db=fs.getFirestore(app);
-  }
-  fb={db,fs,col:fs.collection(db,"songs")};
-  // seed once if database is empty
-  const metaRef=fs.doc(db,"meta","init");
-  const metaSnap=await fs.getDoc(metaRef);
-  if(!metaSnap.exists()){
-    const batch=fs.writeBatch(db);
-    seed().forEach(s=>{ const ref=fs.doc(fs.collection(db,"songs")); batch.set(ref,s); });
-    batch.set(metaRef,{seeded:true,at:fs.serverTimestamp()});
-    await batch.commit();
-  }
-  // live listener
-  const q=fs.query(fb.col,fs.orderBy("sortKey","asc"));
-  fs.onSnapshot(q,snap=>{
+/* ============================================================
+   LISTENERS
+   ============================================================ */
+function startListeners(){
+  if(started) return; started=true;
+  F.onSnapshot(F.query(F.collection(db,"songs"),F.orderBy("sortKey","asc")),snap=>{
     songs=snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderAll();
-  },err=>{
-    console.error(err);
-    $("list").innerHTML=`<div class="empty"><div class="big">Can&rsquo;t reach the database</div>Check your Firestore rules allow read &amp; write.</div>`;
+    songsMap={}; songs.forEach(s=>songsMap[s.id]=s);
+    rerender();
+  },err=>{ console.error("songs listener",err); root.innerHTML=`<div class="wrap"><div class="empty"><div class="big">Can&rsquo;t reach the songbook</div>Make sure you&rsquo;re signed in and your Firestore rules allow access.</div></div>`; });
+
+  F.onSnapshot(F.collection(db,"users",me.uid,"lists"),snap=>{
+    myLists={}; snap.docs.forEach(d=>myLists[d.id]=d.data()); rerender();
+  });
+  F.onSnapshot(F.collection(db,"users"),snap=>{
+    usersMap={}; snap.docs.forEach(d=>usersMap[d.id]=d.data()); rerender();
   });
 }
-async function addSong(song){
-  if(mode==="shared"){ await fb.fs.addDoc(fb.col,{...song,sortKey:Date.now()}); }
-  else { songs.push({id:"s_"+Date.now().toString(36),...song}); saveLocal(); renderAll(); }
+
+/* ============================================================
+   ROUTER
+   ============================================================ */
+function go(hash){ location.hash=hash; }
+function route(){
+  const h=location.hash.replace(/^#/,"")||"/";
+  const parts=h.split("/").filter(Boolean);
+  if(parts[0]==="song") return {view:"song",id:parts[1]};
+  if(parts[0]==="people") return {view:"people"};
+  if(parts[0]==="me") return {view:"user",uid:me?me.uid:null};
+  if(parts[0]==="user") return {view:"user",uid:parts[1]};
+  return {view:"home"};
 }
-async function removeSong(id){
-  if(mode==="shared"){ await fb.fs.deleteDoc(fb.fs.doc(fb.db,"songs",id)); }
-  else { songs=songs.filter(s=>s.id!==id); saveLocal(); renderAll(); }
-}
-async function toggleLearned(s){
-  if(mode==="shared"){ await fb.fs.updateDoc(fb.fs.doc(fb.db,"songs",s.id),{learned:!s.learned}); }
-  else { s.learned=!s.learned; saveLocal(); renderList(); }
-}
-function saveLocal(){ try{ localStorage.setItem("campfire-songs-v1",JSON.stringify(songs)); }catch(e){} }
-function loadLocal(){
-  try{ const raw=localStorage.getItem("campfire-songs-v1"); if(raw){ songs=JSON.parse(raw); return; } }catch(e){}
-  songs=seed().map((s,i)=>({id:"s"+i,...s}));
-  saveLocal();
+function rerender(){ if(me) render(); }
+window.addEventListener("hashchange",()=>{ if(detachNotes){detachNotes();detachNotes=null;} render(); });
+window.addEventListener("online",()=>{online=true;render();});
+window.addEventListener("offline",()=>{online=false;render();});
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function chrome(inner,active){
+  const av=me.photo?`<img class="navav" src="${esc(me.photo)}" alt="">`:`<span class="navav"></span>`;
+  return `
+  <div class="topbar">
+    <div class="brand" data-go="/">${FLAME}<span class="name">Songbook</span></div>
+    <div class="me"><span class="conn ${online?'live':''}" title="${online?'Online':'Offline'}"></span>
+      ${me.photo?`<img class="avatar" src="${esc(me.photo)}" alt="">`:`<span class="avatar"></span>`}</div>
+  </div>
+  <div class="wrap">${inner}</div>
+  <nav class="nav">
+    <button data-go="/" class="${active==='home'?'on':''}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 10l8-6 8 6v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Songs</button>
+    <button data-go="/people" class="${active==='people'?'on':''}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 6.5a3 3 0 0 1 0 6M17 14c2.5.4 4 2.3 4 5"/></svg>People</button>
+    <button data-go="/me" class="${active==='user'?'on':''}">${av}You</button>
+  </nav>`;
 }
 
-/* ---------- queries ---------- */
+function songRow(s){
+  const e=myEntry(s.id);
+  const pill = e.status==='todo'?`<span class="pill todo">To-Do</span>`:e.status==='known'?`<span class="pill known">Known</span>`:"";
+  const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
+  const badges=(pill||tags)?`<div class="badges">${pill}${tags}</div>`:"";
+  return `<div class="row" data-id="${s.id}">
+    <button class="plus ${e.status?'has':''}" data-plus="${s.id}" aria-label="add to list">+</button>
+    <div class="rowmain" data-open="${s.id}">
+      <div class="rowtitle">${esc(s.title)}</div>
+      <div class="rowartist">${esc(s.artist)}</div>${badges}
+    </div>
+    <button class="star ${e.starred?'on':''}" data-star="${s.id}" aria-label="favorite">${starSvg(e.starred)}</button>
+  </div>`;
+}
+
 function allGenres(){
   const set=new Set(); songs.forEach(s=>(s.genres||[]).forEach(g=>set.add(g)));
   const known=Object.keys(GENRE_COLORS).filter(g=>set.has(g));
   const extra=[...set].filter(g=>!GENRE_COLORS[g]).sort();
   return [...known,...extra];
 }
-function filtered(){
+function filteredSongs(){
   const q=query.trim().toLowerCase();
   return songs.filter(s=>{
     const mq=!q||s.title.toLowerCase().includes(q)||s.artist.toLowerCase().includes(q);
@@ -292,122 +439,288 @@ function filtered(){
   });
 }
 
-/* ---------- render ---------- */
-function renderFilters(){
-  const box=$("filters"); box.innerHTML="";
-  const all=document.createElement("button");
-  all.className="chip all"+(activeGenres.size===0?" on":""); all.textContent="All";
-  all.onclick=()=>{activeGenres.clear();renderAll();}; box.appendChild(all);
-  allGenres().forEach(g=>{
-    const c=document.createElement("button");
-    c.className="chip"+(activeGenres.has(g)?" on":""); c.style.setProperty("--gc",gcolor(g));
-    c.innerHTML=`<span class="dot"></span>${esc(g)}`;
-    c.onclick=()=>{activeGenres.has(g)?activeGenres.delete(g):activeGenres.add(g);renderAll();};
-    box.appendChild(c);
-  });
-}
-function renderList(){
-  const list=$("list"); const rows=filtered();
-  if(rows.length===0){ list.innerHTML=`<div class="empty"><div class="big">No songs found</div>Try a different search or clear the filters.</div>`; return; }
-  list.innerHTML="";
-  rows.forEach((s,i)=>{
-    const card=document.createElement("div");
-    card.className="card"; card.style.animationDelay=Math.min(i*22,400)+"ms";
-    const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
-    card.innerHTML=`
-      <button class="star${s.learned?" on":""}" aria-label="learned">
-        <svg width="19" height="19" viewBox="0 0 20 20" fill="${s.learned?'currentColor':'none'}" stroke="currentColor" stroke-width="1.6">
-          <path d="M10 1.8l2.5 5.1 5.6.8-4 4 .95 5.6L10 14.7 4.9 17.3l1-5.6-4-4 5.6-.8z"/></svg>
-      </button>
-      <div class="info"><div class="title">${esc(s.title)}</div><div class="artist">${esc(s.artist)}</div>${tags?`<div class="tags">${tags}</div>`:""}</div>
-      <button class="del" aria-label="remove">&times;</button>`;
-    card.querySelector(".star").onclick=()=>toggleLearned(s);
-    const del=card.querySelector(".del");
-    del.onclick=()=>{
-      if(del.classList.contains("confirm")){ removeSong(s.id); }
-      else{
-        document.querySelectorAll(".del.confirm").forEach(b=>{b.classList.remove("confirm");b.innerHTML="&times;";});
-        del.classList.add("confirm"); del.textContent="Remove?";
-        setTimeout(()=>{ if(del.isConnected){del.classList.remove("confirm");del.innerHTML="&times;";} },2600);
-      }
-    };
-    list.appendChild(card);
-  });
-}
-function renderMeta(){
-  const n=filtered().length; $("count").textContent=songs.length;
+function renderHome(){
+  const chips=[`<button class="chip all ${activeGenres.size===0?'on':''}" data-genre="__all">All</button>`]
+    .concat(allGenres().map(g=>`<button class="chip ${activeGenres.has(g)?'on':''}" style="--gc:${gcolor(g)}" data-genre="${esc(g)}"><span class="dot"></span>${esc(g)}</button>`)).join("");
+  const rows=filteredSongs();
   const sel=[...activeGenres];
-  $("showing").textContent=sel.length?`${n} ${sel.join(" / ")} song${n!==1?"s":""}`:(query?`${n} match${n!==1?"es":""}`:"All songs");
-  $("clear").classList.toggle("show",activeGenres.size>0||!!query);
+  const showing=sel.length?`${rows.length} ${sel.join(" / ")} song${rows.length!==1?"s":""}`:(query?`${rows.length} match${rows.length!==1?"es":""}`:"All songs");
+  const inner=`
+    <div class="ptitle">Campfire Songbook</div>
+    <div class="psub">${songs.length} songs &middot; tap a song to open it</div>
+    <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
+      <input id="search" type="text" placeholder="Search songs or artists&hellip;" autocomplete="off" value="${esc(query)}"></div>
+    <div class="filters">${chips}</div>
+    <div class="meta"><span>${showing}</span><span class="clear ${(activeGenres.size||query)?'show':''}" id="clear">Clear</span></div>
+    <div class="list">${rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`}</div>`;
+  root.innerHTML=chrome(inner,"home")+`<button class="fab" id="fab"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>Add a Song</button>`;
+  const si=$("search");
+  if(si){ si.addEventListener("input",e=>{ query=e.target.value; renderHome(); const n=$("search"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }); }
+  $("fab").onclick=openAddSheet;
+  const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();query="";renderHome();};
 }
-function renderAll(){ renderFilters(); renderList(); renderMeta(); }
 
-/* ---------- add sheet ---------- */
-function renderPicker(){
-  const box=$("gpick"); box.innerHTML="";
-  allGenres().forEach(g=>{
-    const c=document.createElement("button");
-    c.className="chip"+(pickGenres.has(g)?" on":""); c.style.setProperty("--gc",gcolor(g));
-    c.innerHTML=`<span class="dot"></span>${esc(g)}`;
-    c.onclick=()=>{pickGenres.has(g)?pickGenres.delete(g):pickGenres.add(g);renderPicker();validate();};
-    box.appendChild(c);
+function renderSong(id){
+  const s=songsMap[id];
+  if(!s){ root.innerHTML=chrome(`<button class="back" data-go="/">&larr; Back</button><div class="empty"><div class="big">Song not found</div>It may have been removed.</div>`,"home"); return; }
+  const e=myEntry(id);
+  const L=searchLinks(s.title,s.artist);
+  const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
+  const addedLink = s.addedBy && s.addedBy!=="seed" ? `Added by <a data-go="/user/${s.addedBy}">${esc(s.addedByName||"someone")}</a>` : `From the original songbook`;
+  const myNote = currentNotes.find(n=>n.uid===me.uid);
+  const others = currentNotes.filter(n=>n.uid!==me.uid);
+  const othersHtml = others.length?others.map(n=>`
+    <div class="noteitem">
+      <div class="notewho" data-go="/user/${n.uid}">${n.photo?`<img src="${esc(n.photo)}">`:`<span class="navav"></span>`}<span class="nm">${esc(n.name)}</span></div>
+      <div class="notetext">${linkify(n.text)}</div>
+    </div>`).join(""):`<div class="notetext" style="color:var(--faint)">No notes from others yet.</div>`;
+
+  const inner=`
+    <button class="back" data-back="1">&larr; Songs</button>
+    <div class="dhead" id="dhead">
+      <div class="dtitle">${esc(s.title)}</div>
+      <div class="dartist">${esc(s.artist)}</div>
+      <div class="dadded">${addedLink} &middot; <button class="edit-pencil" id="editsong">Edit title/artist</button></div>
+      ${tags?`<div class="dtags">${tags}</div>`:""}
+    </div>
+
+    <div class="section">
+      <h3>Listen</h3>
+      <div class="listen">
+        <a class="spotify" href="${L.spotify}" target="_blank" rel="noopener">Spotify</a>
+        <a class="apple" href="${L.apple}" target="_blank" rel="noopener">Apple Music</a>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>My lists</h3>
+      <div class="mystatus">
+        <button class="sbtn todo ${e.status==='todo'?'on':''}" data-set="todo" data-id="${id}">To-Do</button>
+        <button class="sbtn known ${e.status==='known'?'on':''}" data-set="known" data-id="${id}">Currently Know</button>
+        ${e.status?`<button class="sbtn" data-set="none" data-id="${id}">Remove</button>`:""}
+        <button class="star ${e.starred?'on':''}" data-star="${id}" aria-label="favorite">${starSvg(e.starred)}</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Shared notes &amp; links</h3>
+      <textarea class="notes" id="commnotes" placeholder="Capo, chords, links&hellip; everyone can edit this.">${esc(s.communalNotes||"")}</textarea>
+      <button class="savenote" id="savecomm" disabled>Save shared notes</button><span class="savedmsg" id="commsaved"></span>
+      ${s.communalBy?`<div class="editedby">Last edited by ${esc(s.communalBy)}</div>`:""}
+    </div>
+
+    <div class="section">
+      <h3>My notes</h3>
+      <textarea class="notes" id="mynotes" placeholder="Your own notes on this song (others can see these too).">${esc(myNote?myNote.text:"")}</textarea>
+      <button class="savenote" id="savemine" disabled>Save my notes</button><span class="savedmsg" id="minesaved"></span>
+    </div>
+
+    <div class="section">
+      <h3>Everyone&rsquo;s notes</h3>
+      <div class="notefeed">${othersHtml}</div>
+    </div>
+
+    <button class="ghostbtn danger" id="delsong">Delete this song from the songbook</button>`;
+  root.innerHTML=chrome(inner,"home");
+
+  // notes listener for this song
+  if(detachNotes){detachNotes();detachNotes=null;}
+  detachNotes=F.onSnapshot(F.collection(db,"songs",id,"notes"),snap=>{
+    currentNotes=snap.docs.map(d=>({uid:d.id,...d.data()}));
+    if(route().view==="song"&&route().id===id) renderSong(id);
   });
+
+  // wiring
+  $("editsong").onclick=()=>openEditSong(id);
+  const comm=$("commnotes"), savecomm=$("savecomm");
+  comm.addEventListener("input",()=>{ savecomm.disabled = comm.value===(s.communalNotes||""); });
+  savecomm.onclick=async()=>{ savecomm.disabled=true; await saveCommunal(id,comm.value); $("commsaved").textContent="Saved"; setTimeout(()=>{const m=$("commsaved");if(m)m.textContent="";},1500); };
+  const mine=$("mynotes"), savemine=$("savemine");
+  const orig=myNote?myNote.text:"";
+  mine.addEventListener("input",()=>{ savemine.disabled = mine.value.trim()===orig.trim(); });
+  savemine.onclick=async()=>{ savemine.disabled=true; await savePersonalNote(id,mine.value); $("minesaved").textContent="Saved"; setTimeout(()=>{const m=$("minesaved");if(m)m.textContent="";},1500); };
+  $("delsong").onclick=async()=>{
+    const b=$("delsong");
+    if(b.dataset.confirm){ await deleteSong(id); go("/"); }
+    else{ b.dataset.confirm="1"; b.textContent="Tap again to permanently delete"; setTimeout(()=>{const x=$("delsong");if(x){delete x.dataset.confirm;x.textContent="Delete this song from the songbook";}},3000); }
+  };
 }
-function openSheet(){ pickGenres=new Set(); $("f-title").value=""; $("f-artist").value=""; $("f-newg").value=""; renderPicker(); validate(); $("scrim").classList.add("open"); $("sheet").classList.add("open"); }
-function closeSheet(){ $("scrim").classList.remove("open"); $("sheet").classList.remove("open"); }
-function validate(){ $("save").disabled=!$("f-title").value.trim()||pickGenres.size===0; }
 
-$("fab").onclick=openSheet;
-$("scrim").onclick=closeSheet;
-$("f-title").oninput=validate;
-$("addg").onclick=()=>{ const v=$("f-newg").value.trim(); if(!v)return; pickGenres.add(v.replace(/\s+/g," ")); $("f-newg").value=""; renderPicker(); validate(); };
-$("f-newg").addEventListener("keydown",e=>{ if(e.key==="Enter"){e.preventDefault();$("addg").click();} });
-$("save").onclick=async()=>{
-  const title=$("f-title").value.trim(), artist=$("f-artist").value.trim()||"Unknown";
-  if(!title||pickGenres.size===0)return;
-  const btn=$("save"); btn.disabled=true; btn.textContent="Adding\u2026";
-  try{ await addSong({title,artist,genres:[...pickGenres],learned:false}); }
-  catch(e){ console.error(e); }
-  btn.textContent="Add to songbook";
-  closeSheet(); query=""; $("search").value=""; activeGenres.clear(); renderAll();
-  window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"});
-};
-$("search").addEventListener("input",e=>{ query=e.target.value; renderList(); renderMeta(); });
-$("clear").onclick=()=>{ activeGenres.clear(); query=""; $("search").value=""; renderAll(); };
+function listItem(s,starred){
+  return `<div class="row" data-id="${s.id}">
+    <button class="star ${starred?'on':''}" data-star="${s.id}" aria-label="favorite">${starSvg(starred)}</button>
+    <div class="rowmain" data-open="${s.id}"><div class="rowtitle">${esc(s.title)}</div><div class="rowartist">${esc(s.artist)}</div></div>
+  </div>`;
+}
+async function renderUser(uid){
+  if(!uid){ root.innerHTML=chrome(`<div class="empty"><div class="big">No user</div></div>`,"user"); return; }
+  const isMe=uid===me.uid;
+  const prof=usersMap[uid]||(isMe?{name:me.name,photo:me.photo}:{name:"Friend",photo:""});
+  // fetch this user's lists
+  let entries={};
+  try{ const snap=await F.getDocs(F.collection(db,"users",uid,"lists")); snap.docs.forEach(d=>entries[d.id]=d.data()); }
+  catch(err){ console.error(err); }
+  const collect=status=>Object.entries(entries).filter(([id,v])=>v.status===status&&songsMap[id])
+    .map(([id,v])=>({s:songsMap[id],starred:!!v.starred,at:v.updatedAt?v.updatedAt.seconds||0:0}))
+    .sort((a,b)=> (b.starred?1:0)-(a.starred?1:0) || a.s.title.localeCompare(b.s.title));
+  const known=collect("known"), todo=collect("todo");
+  const sec=(cls,label,items)=>`
+    <div class="listsec ${cls}">
+      <div class="lh"><span class="dot"></span><h2>${label}</h2><span class="ct">${items.length}</span></div>
+      <div class="list">${items.length?items.map(it=>listItem(it.s,it.starred)).join(""):`<div class="empty" style="padding:24px"><div style="color:var(--faint)">Nothing here yet.</div></div>`}</div>
+    </div>`;
+  const inner=`
+    <div style="display:flex;align-items:center;gap:14px;margin:16px 2px 6px">
+      ${prof.photo?`<img class="person" src="${esc(prof.photo)}" style="width:56px;height:56px;border-radius:50%;padding:0;border:1px solid var(--line)">`:`<span style="width:56px;height:56px;border-radius:50%;background:var(--card-hi);border:1px solid var(--line)"></span>`}
+      <div><div class="ptitle" style="margin:0;font-size:26px">${esc(prof.name)}${isMe?" (you)":""}</div>
+      <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${todo.length} to learn</div></div>
+    </div>
+    ${isMe?"":`<button class="back" data-go="/people" style="padding-top:4px">&larr; All people</button>`}
+    ${sec("known","Currently Know",known)}
+    ${sec("todo","To-Do",todo)}`;
+  root.innerHTML=chrome(inner,"user");
+}
 
-/* ---------- boot ---------- */
-function setMode(m){
-  mode=m; const el=$("mode"), t=$("mode-text"), b=$("banner");
-  if(m==="shared"){ el.classList.add("live"); t.textContent="Live \u00b7 shared with everyone"; b.style.display="none"; updateConn(); }
-  else{
-    el.classList.remove("live"); t.textContent="Saved on this device";
-    b.style.display="block";
-    b.innerHTML="<b>Not shared yet.</b> This list only saves on your phone. To make one list everyone edits, add your Firebase keys in the file (see setup notes).";
+function renderPeople(){
+  const ids=Object.keys(usersMap);
+  // put me first
+  ids.sort((a,b)=> (a===me.uid?-1:b===me.uid?1:(usersMap[a].name||"").localeCompare(usersMap[b].name||"")));
+  const cards=ids.map(uid=>{
+    const u=usersMap[uid];
+    return `<div class="person ${uid===me.uid?'merow':''}" data-go="/user/${uid}">
+      ${u.photo?`<img src="${esc(u.photo)}">`:`<span style="width:42px;height:42px;border-radius:50%;background:var(--card-hi);border:1px solid var(--line)"></span>`}
+      <div><div class="pn">${esc(u.name||"Friend")}${uid===me.uid?" (you)":""}</div><div class="pc">View their lists &amp; notes</div></div>
+    </div>`;
+  }).join("");
+  const inner=`<div class="ptitle">People</div><div class="psub">Tap anyone to see what they know and want to learn</div>
+    <div class="list" style="gap:10px">${cards||`<div class="empty"><div class="big">Just you so far</div>Share the link to bring friends around the fire.</div>`}</div>`;
+  root.innerHTML=chrome(inner,"people");
+}
+
+function render(){
+  const r=route();
+  if(r.view!=="song" && detachNotes){ detachNotes(); detachNotes=null; currentNotes=[]; }
+  if(r.view==="home") renderHome();
+  else if(r.view==="song") renderSong(r.id);
+  else if(r.view==="people") renderPeople();
+  else if(r.view==="user") renderUser(r.uid);
+  else renderHome();
+}
+
+/* ---------- global click handling ---------- */
+document.addEventListener("click",e=>{
+  const go_=e.target.closest("[data-go]"); if(go_){ go(go_.getAttribute("data-go")); return; }
+  if(e.target.closest("[data-back]")){ history.length>1?history.back():go("/"); return; }
+  const open=e.target.closest("[data-open]"); if(open){ go("/song/"+open.getAttribute("data-open")); return; }
+  const plus=e.target.closest("[data-plus]"); if(plus){ e.stopPropagation(); openListSheet(plus.getAttribute("data-plus")); return; }
+  const star=e.target.closest("[data-star]"); if(star){ e.stopPropagation(); toggleStar(star.getAttribute("data-star")); return; }
+  const setb=e.target.closest("[data-set]"); if(setb){ const st=setb.getAttribute("data-set"); setStatus(setb.getAttribute("data-id"), st==="none"?null:st); return; }
+  const gen=e.target.closest("[data-genre]"); if(gen){ const g=gen.getAttribute("data-genre"); if(g==="__all")activeGenres.clear(); else{activeGenres.has(g)?activeGenres.delete(g):activeGenres.add(g);} renderHome(); return; }
+});
+
+/* ============================================================
+   SHEETS
+   ============================================================ */
+const scrim=$("scrim"), sheet=$("sheet");
+function openSheet(html){ sheet.innerHTML=`<div class="grip"></div>`+html; scrim.classList.add("open"); sheet.classList.add("open"); }
+function closeSheet(){ scrim.classList.remove("open"); sheet.classList.remove("open"); }
+scrim.onclick=closeSheet;
+
+function openListSheet(id){
+  const s=songsMap[id]; if(!s) return; const e=myEntry(id);
+  openSheet(`
+    <h2>${esc(s.title)}</h2><p class="sh-sub">Add to one of your lists</p>
+    <button class="opt todo ${e.status==='todo'?'on':''}" data-act="todo"><span class="ic">${starOrCheck()}</span>To-Do list</button>
+    <button class="opt known ${e.status==='known'?'on':''}" data-act="known"><span class="ic">${starOrCheck()}</span>Currently Know</button>
+    ${e.status?`<button class="opt remove" data-act="none"><span class="ic">&times;</span>Remove from my lists</button>`:""}
+  `);
+  sheet.querySelectorAll("[data-act]").forEach(b=>b.onclick=async()=>{ const a=b.getAttribute("data-act"); await setStatus(id,a==="none"?null:a); closeSheet(); });
+}
+function starOrCheck(){ return `<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-9"/></svg>`; }
+
+let pickGenres=new Set();
+function openAddSheet(){
+  pickGenres=new Set();
+  const chips=allGenres().map(g=>`<button class="chip" style="--gc:${gcolor(g)}" data-pick="${esc(g)}"><span class="dot"></span>${esc(g)}</button>`).join("");
+  openSheet(`
+    <h2>Add a song</h2><p class="sh-sub">It joins the shared songbook for everyone</p>
+    <div class="field"><label>Song title</label><input class="txt" id="f-title" placeholder="e.g. Wagon Wheel" autocomplete="off"></div>
+    <div class="field"><label>Artist</label><input class="txt" id="f-artist" placeholder="e.g. Darius Rucker" autocomplete="off"></div>
+    <div class="field"><label>Genres (tap any that fit)</label><div class="gpick" id="gpick">${chips}</div>
+      <div class="newg"><input class="txt" id="f-newg" placeholder="Add a new genre&hellip;" autocomplete="off"><button id="addg">Add</button></div></div>
+    <button class="save" id="savesong" disabled>Add to songbook</button>`);
+  const valid=()=>{ $("savesong").disabled = !$("f-title").value.trim() || pickGenres.size===0; };
+  const repaint=()=>{ sheet.querySelectorAll("[data-pick]").forEach(b=>{ b.classList.toggle("on",pickGenres.has(b.getAttribute("data-pick"))); }); };
+  sheet.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ const g=b.getAttribute("data-pick"); pickGenres.has(g)?pickGenres.delete(g):pickGenres.add(g); repaint(); valid(); });
+  $("f-title").addEventListener("input",valid);
+  $("addg").onclick=()=>{ const v=$("f-newg").value.trim(); if(!v)return; const g=v.replace(/\s+/g," "); pickGenres.add(g);
+    const c=document.createElement("button"); c.className="chip on"; c.style.setProperty("--gc",gcolor(g)); c.setAttribute("data-pick",g); c.innerHTML=`<span class="dot"></span>${esc(g)}`;
+    c.onclick=()=>{ pickGenres.has(g)?pickGenres.delete(g):pickGenres.add(g); c.classList.toggle("on"); valid(); };
+    $("gpick").appendChild(c); $("f-newg").value=""; valid(); };
+  $("f-newg").addEventListener("keydown",ev=>{ if(ev.key==="Enter"){ev.preventDefault();$("addg").click();} });
+  $("savesong").onclick=async()=>{ const t=$("f-title").value.trim(), a=$("f-artist").value.trim()||"Unknown"; if(!t||!pickGenres.size)return;
+    const btn=$("savesong"); btn.disabled=true; btn.textContent="Adding\u2026"; await addSong(t,a,[...pickGenres]); closeSheet(); go("/"); };
+}
+
+function openEditSong(id){
+  const s=songsMap[id]; if(!s) return;
+  openSheet(`
+    <h2>Edit song</h2><p class="sh-sub">Fix the title or artist for everyone</p>
+    <div class="field"><label>Song title</label><input class="txt" id="e-title" value="${esc(s.title)}"></div>
+    <div class="field"><label>Artist</label><input class="txt" id="e-artist" value="${esc(s.artist)}"></div>
+    <button class="save" id="esave">Save changes</button>`);
+  $("esave").onclick=async()=>{ const t=$("e-title").value.trim(), a=$("e-artist").value.trim(); if(!t)return;
+    const b=$("esave"); b.disabled=true; b.textContent="Saving\u2026"; await saveSongFields(id,{title:t,artist:a||"Unknown"}); closeSheet(); };
+}
+
+/* ============================================================
+   AUTH UI
+   ============================================================ */
+function renderSignIn(errMsg){
+  root.innerHTML=`<div class="signin">
+    ${FLAME}<h1>Campfire Songbook</h1>
+    <p>Sign in with Google to join the shared songbook, keep your own lists, and see what everyone&rsquo;s playing.</p>
+    <button class="gbtn" id="gsi">
+      <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.4 5.4 2.5 13.3l7.8 6c1.9-5.6 7.1-9.8 13.7-9.8z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.5 3-2.2 5.5-4.7 7.2l7.3 5.7c4.3-4 6.7-9.9 6.7-17.4z"/><path fill="#FBBC05" d="M10.3 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6C.9 16.5 0 20.1 0 24s.9 7.5 2.5 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.3-5.7c-2 1.4-4.7 2.3-8.6 2.3-6.6 0-11.8-4.2-13.7-9.8l-7.8 6C6.4 42.6 14.6 48 24 48z"/></svg>
+      Continue with Google</button>
+    ${errMsg?`<div class="err">${esc(errMsg)}</div>`:""}
+  </div>`;
+  $("gsi").onclick=signIn;
+}
+async function signIn(){
+  const provider=new A.GoogleAuthProvider();
+  try{ await A.signInWithPopup(auth,provider); }
+  catch(err){
+    console.warn("popup failed",err);
+    if(err && (err.code==="auth/popup-blocked"||err.code==="auth/cancelled-popup-request"||err.code==="auth/operation-not-supported-in-this-environment")){
+      try{ await A.signInWithRedirect(auth,provider); return; }catch(e2){ renderSignIn(friendlyAuthErr(e2)); return; }
+    }
+    if(err && err.code==="auth/popup-closed-by-user") return;
+    renderSignIn(friendlyAuthErr(err));
   }
 }
-function updateConn(){
-  if(mode!=="shared") return;
-  const el=$("mode"), t=$("mode-text");
-  if(navigator.onLine){ el.classList.add("live"); t.textContent="Live \u00b7 shared with everyone"; }
-  else{ el.classList.remove("live"); t.textContent="Offline \u00b7 changes sync when back online"; }
-}
-window.addEventListener("online",updateConn);
-window.addEventListener("offline",updateConn);
-
-// Service worker: lets the page itself open with no signal after the first visit
-if("serviceWorker" in navigator){
-  window.addEventListener("load",()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+function friendlyAuthErr(err){
+  const c=err&&err.code||"";
+  if(c==="auth/unauthorized-domain") return "This site isn't authorized in Firebase yet. Add your github.io domain under Authentication \u2192 Settings \u2192 Authorized domains.";
+  if(c==="auth/configuration-not-found") return "Google sign-in isn't enabled yet in Firebase (Authentication \u2192 Sign-in method \u2192 Google).";
+  return "Sign-in failed: "+(err&&err.message||c||"unknown error");
 }
 
-(async function boot(){
-  if(isConfigured()){
-    setMode("shared");
-    try{ await initShared(); }
-    catch(e){ console.error("Firebase failed, falling back to local:",e); setMode("local"); loadLocal(); renderAll(); }
-  }else{
-    setMode("local"); loadLocal(); renderAll();
-  }
-})();
+/* ============================================================
+   BOOT
+   ============================================================ */
+if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }
+A.getRedirectResult(auth).catch(err=>{ if(err&&err.code!=="auth/no-auth-event") console.warn("redirect result",err); });
+
+A.onAuthStateChanged(auth, async user=>{
+  if(!user){ me=null; started=false; renderSignIn(); return; }
+  me={uid:user.uid,name:user.displayName||"Friend",photo:user.photoURL||"",email:user.email||""};
+  root.innerHTML=`<div class="loading">Gathering round the fire&hellip;</div>`;
+  try{ await ensureProfile(user); await ensureSeed(); }
+  catch(err){ console.error("setup",err); }
+  startListeners();
+  render();
+});
 </script>
 </body>
 </html>

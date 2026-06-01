@@ -1,14 +1,12 @@
 /* Campfire Songbook service worker
    Caches the app shell, fonts, and Firebase SDK so the page opens with no
-   signal after the first visit. Firestore data endpoints are left alone so
-   the database's own offline cache and live sync keep working. */
-const CACHE = "campfire-v2";
-const SHELL = ["./", "./index.html"];
+   signal after the first visit. Live database AND auth endpoints are left
+   alone so sign-in and sync work normally. */
+const CACHE = "campfire-v3";
+const SHELL = ["./", "./index.html", "./manifest.webmanifest"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
-  );
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", e => {
@@ -22,10 +20,10 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET") return;
-
   const url = new URL(req.url);
-  // Never intercept live database / telemetry traffic — let Firestore manage it.
-  if (/firestore\.googleapis\.com|firebasedatabase|firebaseinstallations|firebaseremoteconfig|google-analytics|googletagmanager/.test(url.hostname)) {
+
+  // Never intercept live database, auth, or telemetry traffic.
+  if (/firestore\.googleapis\.com|firebasedatabase|firebaseinstallations|firebaseremoteconfig|identitytoolkit\.googleapis\.com|securetoken\.googleapis\.com|accounts\.google\.com|apis\.google\.com|firebaseapp\.com|google-analytics|googletagmanager/.test(url.hostname + url.pathname)) {
     return;
   }
 
@@ -33,12 +31,7 @@ self.addEventListener("fetch", e => {
   e.respondWith(
     caches.match(req).then(cached => {
       const network = fetch(req).then(res => {
-        try {
-          if (res) {
-            const copy = res.clone();
-            caches.open(CACHE).then(c => c.put(req, copy));
-          }
-        } catch (_) {}
+        try { if (res) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); } } catch (_) {}
         return res;
       }).catch(() => cached);
       return cached || network;
