@@ -27,7 +27,9 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;}
-  body{font-family:'Hanken Grotesk',sans-serif;background:var(--bg);color:var(--cream);min-height:100vh;overflow-x:hidden;position:relative;}
+  html{height:100%;}
+  body{font-family:'Hanken Grotesk',sans-serif;background:var(--bg);color:var(--cream);overflow:hidden;position:fixed;inset:0;height:100%;}
+  #root{position:relative;z-index:2;display:flex;flex-direction:column;height:100%;height:100dvh;}
   body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
     background:
       radial-gradient(120% 70% at 50% 118%, rgba(255,120,55,0.34) 0%, rgba(255,120,55,0.10) 32%, rgba(255,120,55,0) 60%),
@@ -37,11 +39,11 @@
   @keyframes flicker{0%,100%{opacity:.92;}25%{opacity:1;}50%{opacity:.86;}72%{opacity:.97;}}
   body::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.05;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
-  .wrap{position:relative;z-index:2;max-width:680px;margin:0 auto;padding:0 18px 150px;}
+  .wrap{position:relative;z-index:2;width:100%;max-width:680px;margin:0 auto;padding:0 18px 24px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   a{color:var(--ember-soft);} button{font-family:inherit;}
   .av{display:inline-grid;place-items:center;border-radius:50%;color:#fff;font-weight:700;line-height:1;border:1px solid rgba(0,0,0,.18);flex:0 0 auto;text-shadow:0 1px 1px rgba(0,0,0,.25);}
 
-  .topbar{position:relative;z-index:2;max-width:680px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:16px 18px 6px;}
+  .topbar{position:relative;z-index:3;flex:0 0 auto;width:100%;max-width:680px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:16px 18px 6px;}
   .brand{display:flex;align-items:center;gap:9px;cursor:pointer;}
   .brand .flame{width:20px;height:25px;}
   .brand .name{font-family:'Fraunces',serif;font-weight:700;font-size:20px;letter-spacing:-.01em;
@@ -70,6 +72,7 @@
   .meta .clear.show{display:inline;}
 
   .list{display:flex;flex-direction:column;gap:10px;}
+  .home-list{padding-bottom:78px;}
   .row{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:11px;transition:border-color .2s,background .2s,transform .1s;}
   .row:active{transform:scale(.993);}
   .plus{flex:0 0 auto;width:34px;height:34px;border-radius:11px;border:1px solid var(--line);background:var(--card-hi);color:var(--cream);font-size:20px;cursor:pointer;display:grid;place-items:center;transition:all .15s;}
@@ -94,19 +97,19 @@
 
   .empty{text-align:center;padding:54px 20px;color:var(--faint);}
   .empty .big{font-family:'Fraunces',serif;font-size:21px;color:var(--muted);margin-bottom:6px;}
-  .loading{text-align:center;padding:70px 20px;color:var(--faint);font-size:15px;}
+  .loading{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:70px 20px;color:var(--faint);font-size:15px;}
 
-  .fab{position:fixed;z-index:25;left:50%;bottom:86px;transform:translateX(-50%);background:linear-gradient(180deg,var(--ember) 0%,#e8662c 100%);
+  .fab{position:fixed;z-index:25;left:50%;bottom:calc(74px + env(safe-area-inset-bottom));transform:translateX(-50%);background:linear-gradient(180deg,var(--ember) 0%,#e8662c 100%);
     color:#241006;font-weight:700;font-size:15px;border:none;border-radius:999px;padding:13px 22px;cursor:pointer;display:flex;align-items:center;gap:8px;
     box-shadow:0 8px 26px rgba(255,110,45,.4),0 2px 0 rgba(255,200,160,.3) inset;transition:transform .15s;}
   .fab:active{transform:translateX(-50%) scale(.95);}
 
-  .nav{position:fixed;z-index:24;left:0;right:0;bottom:0;background:rgba(20,14,9,.86);backdrop-filter:blur(14px);border-top:1px solid var(--line);
+  .nav{position:relative;z-index:24;flex:0 0 auto;width:100%;background:rgba(20,14,9,.92);border-top:1px solid var(--line);
     display:flex;max-width:680px;margin:0 auto;padding:8px 0 calc(8px + env(safe-area-inset-bottom));}
   .nav button{flex:1;background:none;border:none;color:var(--faint);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;letter-spacing:.02em;padding:4px;transition:color .2s;}
   .nav button.on{color:var(--ember-soft);}
 
-  .gate{position:relative;z-index:2;max-width:430px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 26px;}
+  .gate{position:relative;z-index:2;width:100%;max-width:430px;margin:0 auto;flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 26px;}
   .gate .flame{width:54px;height:68px;margin-bottom:14px;}
   .gate h1{font-family:'Fraunces',serif;font-weight:800;font-size:38px;margin:0;letter-spacing:-.02em;
     background:linear-gradient(180deg,var(--cream) 0%,var(--amber) 130%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
@@ -491,7 +494,7 @@ function renderHome(){
       <input id="search" type="text" placeholder="Search songs or artists&hellip;" autocomplete="off" value="${esc(query)}"></div>
     <div class="filters">${chips}</div>
     <div class="meta"><span>${showing}</span><span class="clear ${active?'show':''}" id="clear">Clear</span></div>
-    <div class="list">${rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`}</div>`;
+    <div class="list home-list">${rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`}</div>`;
   root.innerHTML=chrome(inner,"home")+`<button class="fab" id="fab"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>Add a Song</button>`;
   const si=$("search"); if(si){ si.addEventListener("input",e=>{ query=e.target.value; renderHome(); const n=$("search"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }); }
   $("fab").onclick=openAddSheet; const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();excludeGenres.clear();query="";renderHome();};
