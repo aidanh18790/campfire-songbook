@@ -963,7 +963,7 @@ function renderGate(){
   inp.addEventListener("input",()=>btn.disabled=!inp.value.trim());
   document.querySelectorAll(".swatch").forEach(b=>b.onclick=()=>{ color=b.getAttribute("data-color"); document.querySelectorAll(".swatch").forEach(x=>x.classList.toggle("on",x.getAttribute("data-color")===color)); });
   btn.onclick=async()=>{ const n=inp.value.trim(); if(!n)return; btn.disabled=true; btn.textContent="Lighting the fire\u2026";
-    saveProfile(n,color); try{ await ensureProfile(); await ensureSeed(); }catch(e){ console.error(e); } startListeners(); showNewCode(); };
+    saveProfile(n,color); startListeners(); ensureProfile().catch(e=>console.warn("profile",e)); ensureSeed().catch(e=>console.warn("seed",e)); showNewCode(); };
   $("g-restore").onclick=renderRestore;
   setTimeout(()=>inp.focus(),100);
 }
@@ -979,7 +979,7 @@ function renderRestore(){
   inp.addEventListener("keydown",ev=>{ if(ev.key==="Enter"&&!btn.disabled){ev.preventDefault();btn.click();} });
   btn.onclick=async()=>{ btn.disabled=true; btn.textContent="Looking\u2026"; $("r-err").textContent="";
     const prof=await restoreProfile(inp.value);
-    if(prof){ try{ await ensureSeed(); }catch(e){} startListeners(); go("/"); render(); }
+    if(prof){ startListeners(); ensureSeed().catch(e=>console.warn("seed",e)); go("/"); render(); }
     else{ btn.disabled=false; btn.textContent="Restore my profile"; $("r-err").textContent="No profile found for that code. Check the spelling, or start fresh."; }
   };
   $("r-back").onclick=renderGate;
@@ -1005,9 +1005,13 @@ if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.s
   me=loadProfile();
   if(!me){ renderGate(); return; }
   root.innerHTML=`<div class="loading">Gathering round the fire&hellip;</div>`;
-  try{ await ensureProfile(); await ensureSeed(); }catch(e){ console.error("setup",e); }
+  // Start listeners and render right away — Firestore's offline cache serves data
+  // even with no internet. The profile/seed writes below must NOT block the UI,
+  // because offline they hang indefinitely rather than failing.
   startListeners();
   render();
+  ensureProfile().catch(e=>console.warn("profile sync deferred",e));
+  ensureSeed().catch(e=>console.warn("seed deferred",e));
 })();
 </script>
 </body>
