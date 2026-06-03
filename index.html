@@ -213,8 +213,18 @@
   .slot-cell{height:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 14px;}
   .sc-title{font-family:'Fraunces',serif;font-weight:600;font-size:19px;line-height:1.1;letter-spacing:-.01em;}
   .sc-artist{color:var(--muted);font-size:13px;margin-top:3px;}
-  .spinbtn{display:block;margin:20px auto 0;background:linear-gradient(180deg,var(--ember) 0%,#e8662c 100%);color:#241006;font-weight:700;font-size:17px;
-    border:none;border-radius:14px;padding:15px 34px;cursor:pointer;box-shadow:0 8px 26px rgba(255,110,45,.36);transition:transform .15s,opacity .2s;}
+  .spinopts{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:18px;flex-wrap:wrap;}
+  .toggle{display:inline-flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;padding:4px;}
+  .toggle .kn{position:relative;width:44px;height:26px;border-radius:999px;background:var(--card-hi);border:1px solid var(--line);transition:background .2s,border-color .2s;flex:0 0 auto;}
+  .toggle .kn::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:transform .2s,background .2s;}
+  .toggle.on{color:var(--cream);}
+  .toggle.on .kn{background:var(--ember);border-color:transparent;}
+  .toggle.on .kn::after{transform:translateX(18px);background:#241006;}
+  .resetbtn{background:var(--card-hi);border:1px solid var(--line);color:var(--muted);font-size:13px;font-weight:600;border-radius:999px;padding:8px 14px;cursor:pointer;transition:transform .12s;}
+  .resetbtn:active{transform:scale(.95);}
+  .dupcard{background:var(--card);border:1px solid var(--line-hi);border-radius:14px;padding:13px 15px;margin-bottom:12px;cursor:pointer;}
+  .dupcard:active{transform:scale(.99);}
+  .spinbtn{display:block;margin:20px auto 0;background:linear-gradient(180deg,var(--ember) 0%,#e8662c 100%);color:#241006;font-weight:700;font-size:17px;    border:none;border-radius:14px;padding:15px 34px;cursor:pointer;box-shadow:0 8px 26px rgba(255,110,45,.36);transition:transform .15s,opacity .2s;}
   .spinbtn:active{transform:scale(.96);} .spinbtn:disabled{opacity:.6;}
   .spin-pick{margin-top:22px;}
   .pick-card{background:var(--card-hi);border:1px solid rgba(232,179,90,.4);border-radius:18px;padding:20px;text-align:center;cursor:pointer;
@@ -339,6 +349,7 @@ let query="", activeGenres=new Set(), excludeGenres=new Set(), online=navigator.
 let sortMode="added", sortDir="desc";  // added|known|todo ; desc|asc
 let collapsed={known:false,todo:false};
 let userGenres=new Set();  // genre filter on the personal page
+let noRepeats=false, spinPlayed=new Set();
 let lastUserView=null;
 let isAdmin=(()=>{try{return localStorage.getItem("cf-admin")==="1";}catch(e){return false;}})();
 let detachNotes=null, currentNotes=[], notesSongId=null, lastSong=null;
@@ -701,45 +712,58 @@ function renderPeople(){
 
 function renderSpin(){
   const known=Object.entries(myLists).filter(([id,v])=>v.status==='known'&&songsMap[id]).map(([id])=>songsMap[id]);
+  const knownIds=new Set(known.map(s=>s.id));
+  // keep played set valid against current known list
+  [...spinPlayed].forEach(id=>{ if(!knownIds.has(id)) spinPlayed.delete(id); });
+  const pool=noRepeats? known.filter(s=>!spinPlayed.has(s.id)) : known;
+  const playedCount=spinPlayed.size;
   const inner=`
     <div class="ptitle">What should I play?</div>
     <div class="psub">Spins from your Currently Know list (${known.length} song${known.length!==1?"s":""})</div>
     ${known.length===0
       ? `<div class="empty" style="padding:50px 20px"><div class="big">Nothing to spin yet</div>Add songs to your <b>Currently Know</b> list and they'll show up here.</div>`
-      : `<div class="slot"><div class="slot-window"><div class="slot-reel" id="reel"></div></div></div>
-         <button class="spinbtn" id="spinbtn">Spin the wheel</button>
+      : `<div class="spinopts">
+           <button class="toggle ${noRepeats?'on':''}" id="norep" role="switch" aria-checked="${noRepeats}"><span class="kn"></span><span class="tl">No repeats</span></button>
+           ${noRepeats?`<button class="resetbtn" id="resetspin">Reset (${playedCount} played)</button>`:""}
+         </div>
+         <div class="slot"><div class="slot-window"><div class="slot-reel" id="reel"></div></div></div>
+         <button class="spinbtn" id="spinbtn"${pool.length===0?" disabled":""}>${pool.length===0?"All played \u2014 reset to spin":"Spin the wheel"}</button>
          <div class="spin-pick" id="pick"></div>`}`;
   root.innerHTML=chrome(inner,"spin");
   if(known.length===0) return;
   const reel=$("reel"), btn=$("spinbtn"), pick=$("pick");
   const cell=s=>`<div class="slot-cell"><div class="sc-title">${esc(s.title)}</div><div class="sc-artist">${esc(s.artist)}</div></div>`;
-  // initial idle reel
-  reel.innerHTML=known.map(cell).join("");
+  reel.innerHTML=(pool.length?pool:known).map(cell).join("");
+  $("norep").onclick=()=>{ noRepeats=!noRepeats; renderSpin(); };
+  const rs=$("resetspin"); if(rs) rs.onclick=()=>{ spinPlayed.clear(); renderSpin(); };
   let spinning=false;
   btn.onclick=()=>{
-    if(spinning) return; spinning=true; pick.innerHTML=""; btn.disabled=true; btn.textContent="Spinning\u2026";
-    const winner=known[Math.floor(Math.random()*known.length)];
-    // build a long strip that ends on the winner
-    const strip=[];
-    const spins=18+Math.floor(Math.random()*8);
+    if(spinning||pool.length===0) return; spinning=true; pick.innerHTML=""; btn.disabled=true; btn.textContent="Spinning\u2026";
+    const winner=pool[Math.floor(Math.random()*pool.length)];
+    const strip=[]; const spins=18+Math.floor(Math.random()*8);
     for(let i=0;i<spins;i++) strip.push(known[Math.floor(Math.random()*known.length)]);
     strip.push(winner);
     reel.innerHTML=strip.map(cell).join("");
     const cellH=72;
     reel.style.transition="none"; reel.style.transform="translateY(0)";
-    // force reflow then animate to last cell
     void reel.offsetHeight;
     const target=(strip.length-1)*cellH;
     const dur=2600+Math.random()*700;
     reel.style.transition=`transform ${dur}ms cubic-bezier(.12,.7,.16,1)`;
     reel.style.transform=`translateY(-${target}px)`;
     setTimeout(()=>{
-      spinning=false; btn.disabled=false; btn.textContent="Spin again";
+      if(noRepeats) spinPlayed.add(winner.id);
+      const remaining = noRepeats ? known.filter(s=>!spinPlayed.has(s.id)).length : known.length;
+      spinning=false;
       pick.innerHTML=`<div class="pick-card" data-open="${winner.id}">
         <div class="pick-label">Play this one</div>
         <div class="pick-title">${esc(winner.title)}</div>
         <div class="pick-artist">${esc(winner.artist)}</div>
         <div class="pick-tap">Tap to open the song &rarr;</div></div>`;
+      // refresh controls (reset count / pool) without wiping the reveal
+      const rb=$("resetspin"); if(rb) rb.textContent=`Reset (${spinPlayed.size} played)`;
+      if(noRepeats && remaining===0){ btn.disabled=true; btn.textContent="All played \u2014 reset to spin"; }
+      else { btn.disabled=false; btn.textContent="Spin again"; }
     },dur+60);
   };
 }
@@ -763,7 +787,7 @@ document.addEventListener("click",e=>{
   const arm=e.target.closest("[data-aremove]"); if(arm){ e.stopPropagation(); adminRemoveSheet(arm.getAttribute("data-aremove")); return; }
   const g=e.target.closest("[data-go]"); if(g){ go(g.getAttribute("data-go")); return; }
   if(e.target.closest("[data-back]")){ history.length>1?history.back():go("/"); return; }
-  const open=e.target.closest("[data-open]"); if(open){ go("/song/"+open.getAttribute("data-open")); return; }
+  const open=e.target.closest("[data-open]"); if(open){ closeSheet(); go("/song/"+open.getAttribute("data-open")); return; }
   const plus=e.target.closest("[data-plus]"); if(plus){ e.stopPropagation(); openListSheet(plus.getAttribute("data-plus")); return; }
   const star=e.target.closest("[data-star]"); if(star){ e.stopPropagation(); toggleStar(star.getAttribute("data-star")); return; }
   const setb=e.target.closest("[data-set]"); if(setb){ const st=setb.getAttribute("data-set"); const sid=setb.getAttribute("data-id"); const cur=myEntry(sid).status; setStatus(sid, cur===st?null:st); return; }
@@ -817,8 +841,30 @@ function openAddSheet(){
     const c=document.createElement("button"); c.className="chip on"; c.style.setProperty("--gc",gcolor(g)); c.setAttribute("data-pick",g); c.innerHTML=`<span class="dot"></span>${esc(g)}`;
     c.onclick=()=>{ pickGenres.has(g)?pickGenres.delete(g):pickGenres.add(g); c.classList.toggle("on"); valid(); }; $("gpick").appendChild(c); $("f-newg").value=""; valid(); };
   $("f-newg").addEventListener("keydown",ev=>{ if(ev.key==="Enter"){ev.preventDefault();$("addg").click();} });
-  $("savesong").onclick=async()=>{ const t=$("f-title").value.trim(), a=$("f-artist").value.trim()||"Unknown"; if(!t||!pickGenres.size)return;
-    const btn=$("savesong"); btn.disabled=true; btn.textContent="Adding\u2026"; await addSong(t,a,[...pickGenres]); closeSheet(); go("/"); };
+  $("savesong").onclick=()=>{ const t=$("f-title").value.trim(), a=$("f-artist").value.trim()||"Unknown"; if(!t||!pickGenres.size)return;
+    const norm=x=>x.toLowerCase().replace(/[^a-z0-9]/g,"");
+    const dupes=songs.filter(s=>norm(s.title)===norm(t));
+    if(dupes.length){ confirmDuplicate(t,a,[...pickGenres],dupes); return; }
+    commitAdd(t,a,[...pickGenres]);
+  };
+}
+async function commitAdd(t,a,genres){ await addSong(t,a,genres); closeSheet(); go("/"); }
+function confirmDuplicate(t,a,genres,dupes){
+  const list=dupes.map(s=>{
+    const sd=allLists[s.id]||{known:[],todo:[]};
+    const who=(s.addedBy&&s.addedBy!=="seed")?`Added by ${esc(nameOf(s.addedBy,s.addedByName))}`:"From the original songbook";
+    const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
+    return `<div class="dupcard" data-open="${s.id}">
+      <div class="rowtitle">${esc(s.title)}</div><div class="rowartist">${esc(s.artist)}</div>
+      <div class="rowadded">${who} &middot; ${sd.known.length} know &middot; ${sd.todo.length} to-do</div>
+      ${tags?`<div class="badges" style="margin-top:6px">${tags}</div>`:""}</div>`;
+  }).join("");
+  openSheet(`<h2>Already in the songbook?</h2><p class="sh-sub">A song with this name already exists. Is it the same one?</p>
+    ${list}
+    <button class="save" id="dup-cancel" style="background:var(--card-hi);color:var(--cream);border:1px solid var(--line)">It's already there &mdash; cancel</button>
+    <button class="ghostbtn" id="dup-add">No, add mine anyway</button>`);
+  $("dup-cancel").onclick=closeSheet;
+  $("dup-add").onclick=()=>{ commitAdd(t,a,genres); };
 }
 
 function openEditSong(id){
