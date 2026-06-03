@@ -68,6 +68,7 @@
   .chip.on .dot{background:rgba(20,14,8,.45);}
   .chip.all{color:var(--cream);} .chip.all.on{background:var(--cream);color:#1a120b;}
   .meta{display:flex;justify-content:space-between;align-items:baseline;color:var(--faint);font-size:12px;letter-spacing:.04em;text-transform:uppercase;padding:2px 2px 10px;}
+  .homectl{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,var(--bg) 78%,rgba(21,15,10,0) 100%);padding-top:4px;margin:0 -18px;padding-left:18px;padding-right:18px;}
   .sortbar{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 4px;margin:0 -2px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
   .sortbar::-webkit-scrollbar{display:none;}
   .sortbar .sortbtn{flex:0 0 auto;font-size:12.5px;font-weight:600;color:var(--muted);background:var(--card);border:1px solid var(--line);padding:7px 13px;border-radius:10px;white-space:nowrap;cursor:pointer;transition:all .15s;}
@@ -85,6 +86,7 @@
   .rowmain{flex:1;min-width:0;cursor:pointer;}
   .rowtitle{font-family:'Fraunces',serif;font-weight:600;font-size:17px;line-height:1.2;letter-spacing:-.01em;}
   .rowartist{color:var(--muted);font-size:13.5px;margin-top:2px;}
+  .rowadded{color:var(--faint);font-size:12px;margin-top:3px;}
   .badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;align-items:center;}
   .pill{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:6px;}
   .pill.todo{color:#241a06;background:var(--todo);}
@@ -146,7 +148,9 @@
   .sbtn:active{transform:scale(.96);}
   .sbtn.todo.on{background:var(--todo);color:#241a06;border-color:transparent;}
   .sbtn.known.on{background:var(--known);color:#14210b;border-color:transparent;}
-  textarea.notes{width:100%;font-family:inherit;font-size:15px;line-height:1.5;color:var(--cream);background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:12px;padding:13px;outline:none;resize:vertical;min-height:78px;transition:border-color .2s;}
+  textarea.notes{width:100%;font-family:inherit;font-size:15px;line-height:1.5;color:var(--cream);background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:12px;padding:13px;outline:none;resize:none;height:96px;overflow-y:auto;transition:border-color .2s,height .2s;}
+  textarea.notes.expanded{height:auto;min-height:300px;overflow-y:hidden;}
+  .expandtog{float:right;background:none;border:none;color:var(--ember-soft);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:2px 0;}
   textarea.notes:focus{border-color:var(--ember-soft);}
   .savenote{margin-top:10px;font-weight:700;font-size:14px;color:#241006;background:linear-gradient(180deg,var(--amber) 0%,#d99b3c 100%);border:none;border-radius:11px;padding:11px 18px;cursor:pointer;transition:transform .12s,opacity .2s;}
   .savenote:active{transform:scale(.97);} .savenote:disabled{opacity:.4;}
@@ -185,12 +189,38 @@
   .minibtn.danger{color:#e89;border-color:rgba(220,96,72,.32);}
 
   .listsec{margin-top:20px;}
-  .listsec .lh{display:flex;align-items:center;gap:9px;margin:0 2px 12px;}
-  .listsec .lh .dot{width:10px;height:10px;border-radius:50%;}
+  .listsec .lh{display:flex;align-items:center;gap:9px;margin:0 0 12px;padding:6px 2px;width:100%;background:none;border:none;cursor:pointer;text-align:left;}
+  .listsec .lh:active{opacity:.7;}
+  .listsec .lh .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
   .listsec.todo .lh .dot{background:var(--todo);}
   .listsec.known .lh .dot{background:var(--known);}
-  .listsec .lh h2{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin:0;letter-spacing:-.01em;}
+  .listsec .lh h2{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin:0;letter-spacing:-.01em;color:var(--cream);}
   .listsec .lh .ct{color:var(--faint);font-size:13px;font-weight:600;}
+  .listsec .lh .chev{margin-left:auto;color:var(--faint);font-size:20px;line-height:1;width:20px;text-align:center;}
+  .listsec.collapsed .seclist{display:none;}
+  .slot{margin:24px auto 0;max-width:420px;}
+  .slot-window{position:relative;height:72px;overflow:hidden;border-radius:16px;border:1px solid var(--line-hi);background:rgba(0,0,0,.28);
+    box-shadow:inset 0 10px 18px -10px rgba(0,0,0,.7),inset 0 -10px 18px -10px rgba(0,0,0,.7);}
+  .slot-window::before,.slot-window::after{content:"";position:absolute;left:0;right:0;height:22px;z-index:2;pointer-events:none;}
+  .slot-window::before{top:0;background:linear-gradient(180deg,rgba(20,14,9,.9),transparent);}
+  .slot-window::after{bottom:0;background:linear-gradient(0deg,rgba(20,14,9,.9),transparent);}
+  .slot-window .ind{position:absolute;inset:0;border:2px solid var(--ember);border-radius:16px;z-index:3;pointer-events:none;opacity:.0;}
+  .slot-reel{display:flex;flex-direction:column;}
+  .slot-cell{height:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 14px;}
+  .sc-title{font-family:'Fraunces',serif;font-weight:600;font-size:19px;line-height:1.1;letter-spacing:-.01em;}
+  .sc-artist{color:var(--muted);font-size:13px;margin-top:3px;}
+  .spinbtn{display:block;margin:20px auto 0;background:linear-gradient(180deg,var(--ember) 0%,#e8662c 100%);color:#241006;font-weight:700;font-size:17px;
+    border:none;border-radius:14px;padding:15px 34px;cursor:pointer;box-shadow:0 8px 26px rgba(255,110,45,.36);transition:transform .15s,opacity .2s;}
+  .spinbtn:active{transform:scale(.96);} .spinbtn:disabled{opacity:.6;}
+  .spin-pick{margin-top:22px;}
+  .pick-card{background:var(--card-hi);border:1px solid rgba(232,179,90,.4);border-radius:18px;padding:20px;text-align:center;cursor:pointer;
+    animation:rise .4s cubic-bezier(.2,.7,.3,1);transition:transform .12s;}
+  .pick-card:active{transform:scale(.98);}
+  @keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  .pick-label{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);}
+  .pick-title{font-family:'Fraunces',serif;font-weight:700;font-size:26px;line-height:1.1;margin-top:6px;letter-spacing:-.02em;}
+  .pick-artist{color:var(--muted);font-size:15px;margin-top:4px;}
+  .pick-tap{color:var(--ember-soft);font-size:13px;font-weight:600;margin-top:12px;}
 
   .scrim{position:fixed;inset:0;z-index:60;background:rgba(8,5,3,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .28s;}
   .scrim.open{opacity:1;pointer-events:auto;}
@@ -303,6 +333,7 @@ let me=null;                 // {uid,name,color}
 let songs=[], songsMap={}, myLists={}, usersMap={}, allLists={};
 let query="", activeGenres=new Set(), excludeGenres=new Set(), online=navigator.onLine, started=false;
 let sortMode="added", sortDir="desc";  // added|known|todo ; desc|asc
+let collapsed={known:false,todo:false};
 let isAdmin=(()=>{try{return localStorage.getItem("cf-admin")==="1";}catch(e){return false;}})();
 let detachNotes=null, currentNotes=[], notesSongId=null, lastSong=null;
 
@@ -427,6 +458,7 @@ function route(){
   const h=location.hash.replace(/^#/,"")||"/"; const parts=h.split("/").filter(Boolean);
   if(parts[0]==="song") return {view:"song",id:parts[1]};
   if(parts[0]==="people") return {view:"people"};
+  if(parts[0]==="spin") return {view:"spin"};
   if(parts[0]==="me") return {view:"user",uid:me?me.uid:null};
   if(parts[0]==="user") return {view:"user",uid:parts[1]};
   return {view:"home"};
@@ -449,6 +481,7 @@ function chrome(inner,active){
   <nav class="nav">
     <button data-go="/" class="${active==='home'?'on':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 10l8-6 8 6v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Songs</button>
     <button data-go="/people" class="${active==='people'?'on':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 6.5a3 3 0 0 1 0 6M17 14c2.5.4 4 2.3 4 5"/></svg>People</button>
+    <button data-go="/spin" class="${active==='spin'?'on':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 12l5-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>Spin</button>
     <button data-go="/me" class="${active==='user'?'on':''}"><span style="margin-bottom:1px">${avatar(me.name,me.color,22)}</span>You</button>
   </nav>`;
 }
@@ -460,9 +493,10 @@ function songRow(s){
   const badges=(pill||tags)?`<div class="badges">${pill}${tags}</div>`:"";
   const sd=allLists[s.id]||{known:[],todo:[]};
   const counter=`<div class="counter">${sd.known.length?`<span class="cknown">${knownIcon} ${sd.known.length}</span>`:""}${sd.todo.length?`<span class="ctodo">${todoIcon} ${sd.todo.length}</span>`:""}${(!sd.known.length&&!sd.todo.length)?`<span class="cnone">Not on anyone&rsquo;s list yet</span>`:""}</div>`;
+  const addedBy = (s.addedBy && s.addedBy!=="seed") ? `<div class="rowadded">Added by ${esc(nameOf(s.addedBy,s.addedByName))}</div>` : "";
   return `<div class="row" data-id="${s.id}">
     <button class="plus ${e.status?'has':''}" data-plus="${s.id}" aria-label="add to list">+</button>
-    <div class="rowmain" data-open="${s.id}"><div class="rowtitle">${esc(s.title)}</div><div class="rowartist">${esc(s.artist)}</div>${counter}${badges}</div>
+    <div class="rowmain" data-open="${s.id}"><div class="rowtitle">${esc(s.title)}</div><div class="rowartist">${esc(s.artist)}</div>${addedBy}${counter}${badges}</div>
     <button class="star ${e.starred?'on':''}" data-star="${s.id}" aria-label="favorite">${starSvg(e.starred)}</button>
   </div>`;
 }
@@ -503,13 +537,18 @@ function renderHome(){
   const inner=`
     <div class="ptitle">Campfire Songbook</div>
     <div class="psub">${songs.length} songs &middot; tap a genre to include, tap again to exclude</div>
-    <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
-      <input id="search" type="text" placeholder="Search songs or artists&hellip;" autocomplete="off" value="${esc(query)}"></div>
-    <div class="filters">${chips}</div>
-    <div class="sortbar">${sortBtn("added")}${sortBtn("known")}${sortBtn("todo")}</div>
-    <div class="meta"><span>${showing}</span><span class="clear ${active?'show':''}" id="clear">Clear</span></div>
+    <div class="homectl">
+      <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
+        <input id="search" type="text" placeholder="Search songs or artists&hellip;" autocomplete="off" value="${esc(query)}"></div>
+      <div class="filters" id="filters">${chips}</div>
+      <div class="sortbar" id="sortbar">${sortBtn("added")}${sortBtn("known")}${sortBtn("todo")}</div>
+      <div class="meta"><span>${showing}</span><span class="clear ${active?'show':''}" id="clear">Clear</span></div>
+    </div>
     <div class="list home-list">${rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`}</div>`;
+  const _wrapScroll=(()=>{const w=document.querySelector(".wrap");return w?w.scrollTop:0;})();
+  const _filScroll=(()=>{const f=$("filters");return f?f.scrollLeft:0;})();
   root.innerHTML=chrome(inner,"home")+`<button class="fab" id="fab"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>Add a Song</button>`;
+  (()=>{const w=document.querySelector(".wrap");if(w)w.scrollTop=_wrapScroll;const f=$("filters");if(f)f.scrollLeft=_filScroll;})();
   const si=$("search"); if(si){ si.addEventListener("input",e=>{ query=e.target.value; renderHome(); const n=$("search"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }); }
   $("fab").onclick=openAddSheet; const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();excludeGenres.clear();query="";renderHome();};
 }
@@ -553,21 +592,25 @@ function renderSong(id){
       <button class="sbtn known ${e.status==='known'?'on':''}" data-set="known" data-id="${id}">Currently Know</button>
       <button class="star ${e.starred?'on':''}" data-star="${id}" aria-label="favorite">${starSvg(e.starred)}</button></div></div>
     ${supplyDemandSection(id)}
-    <div class="section"><h3>Shared notes &amp; links</h3>
+    <div class="section"><h3>Shared notes &amp; links <button class="expandtog" data-expand="commnotes">Expand</button></h3>
       <textarea class="notes" id="commnotes" placeholder="Capo, chords, links&hellip; everyone can edit this.">${esc(s.communalNotes||"")}</textarea>
       <button class="savenote" id="savecomm" disabled>Save shared notes</button><span class="savedmsg" id="commsaved"></span>
       ${s.communalBy?`<div class="editedby">Last edited by ${esc(s.communalBy)}</div>`:""}</div>
-    <div class="section"><h3>My notes</h3>
+    <div class="section"><h3>My notes <button class="expandtog" data-expand="mynotes">Expand</button></h3>
       <textarea class="notes" id="mynotes" placeholder="Your own notes (everyone can see these too).">${esc(myNote?myNote.text:"")}</textarea>
       <button class="savenote" id="savemine" disabled>Save my notes</button><span class="savedmsg" id="minesaved"></span></div>
     <div class="section"><h3>Everyone&rsquo;s notes</h3><div class="notefeed">${othersHtml}</div></div>
     <button class="ghostbtn danger" id="delsong">Delete this song from the songbook</button>`;
   const _cap={comm:(()=>{const el=$("commnotes");return el?el.value:null;})(),mine:(()=>{const el=$("mynotes");return el?el.value:null;})(),
+    commEx:(()=>{const el=$("commnotes");return el?el.classList.contains("expanded"):false;})(),
+    mineEx:(()=>{const el=$("mynotes");return el?el.classList.contains("expanded"):false;})(),
     focus:document.activeElement&&document.activeElement.id,sel:(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null};
   root.innerHTML=chrome(inner,"home");
   if(lastSong===id){
     if(_cap.comm!=null){const el=$("commnotes");if(el){el.value=_cap.comm;const sc=$("savecomm");if(sc)sc.disabled=(el.value===(s.communalNotes||""));}}
     if(_cap.mine!=null){const el=$("mynotes");if(el){el.value=_cap.mine;const sm=$("savemine");if(sm)sm.disabled=(el.value.trim()===(myNote?myNote.text:"").trim());}}
+    if(_cap.commEx){const el=$("commnotes");if(el){el.classList.add("expanded");const t=document.querySelector('[data-expand="commnotes"]');if(t)t.textContent="Collapse";}}
+    if(_cap.mineEx){const el=$("mynotes");if(el){el.classList.add("expanded");const t=document.querySelector('[data-expand="mynotes"]');if(t)t.textContent="Collapse";}}
     if(_cap.focus){const el=$(_cap.focus);if(el){el.focus();if(_cap.sel!=null){try{el.setSelectionRange(_cap.sel,_cap.sel);}catch(e){}}}}
   }
   lastSong=id;
@@ -602,8 +645,9 @@ async function renderUser(uid){
     .map(([id,v])=>({s:songsMap[id],starred:!!v.starred}))
     .sort((a,b)=>(b.starred?1:0)-(a.starred?1:0)||a.s.title.localeCompare(b.s.title));
   const known=collect("known"), todo=collect("todo");
-  const sec=(cls,label,items)=>`<div class="listsec ${cls}"><div class="lh"><span class="dot"></span><h2>${label}</h2><span class="ct">${items.length}</span></div>
-    <div class="list">${items.length?items.map(it=>listItem(it.s,it.starred)).join(""):`<div class="empty" style="padding:24px"><div style="color:var(--faint)">Nothing here yet.</div></div>`}</div></div>`;
+  const sec=(cls,label,items)=>{ const col=collapsed[cls]?" collapsed":"";
+    return `<div class="listsec ${cls}${col}"><button class="lh" data-collapse="${cls}"><span class="dot"></span><h2>${label}</h2><span class="ct">${items.length}</span><span class="chev">${collapsed[cls]?"\u203A":"\u2304"}</span></button>
+    <div class="list seclist">${items.length?items.map(it=>listItem(it.s,it.starred)).join(""):`<div class="empty" style="padding:24px"><div style="color:var(--faint)">Nothing here yet.</div></div>`}</div></div>`; };
   const inner=`
     <div style="display:flex;align-items:center;gap:14px;margin:16px 2px 6px">${avatar(pname,pcolor,56)}
       <div><div class="ptitle" style="margin:0;font-size:26px">${esc(pname)}${isMe?" (you)":""}</div>
@@ -631,18 +675,66 @@ function renderPeople(){
   root.innerHTML=chrome(inner,"people");
 }
 
+function renderSpin(){
+  const known=Object.entries(myLists).filter(([id,v])=>v.status==='known'&&songsMap[id]).map(([id])=>songsMap[id]);
+  const inner=`
+    <div class="ptitle">What should I play?</div>
+    <div class="psub">Spins from your Currently Know list (${known.length} song${known.length!==1?"s":""})</div>
+    ${known.length===0
+      ? `<div class="empty" style="padding:50px 20px"><div class="big">Nothing to spin yet</div>Add songs to your <b>Currently Know</b> list and they'll show up here.</div>`
+      : `<div class="slot"><div class="slot-window"><div class="slot-reel" id="reel"></div></div></div>
+         <button class="spinbtn" id="spinbtn">Spin the wheel</button>
+         <div class="spin-pick" id="pick"></div>`}`;
+  root.innerHTML=chrome(inner,"spin");
+  if(known.length===0) return;
+  const reel=$("reel"), btn=$("spinbtn"), pick=$("pick");
+  const cell=s=>`<div class="slot-cell"><div class="sc-title">${esc(s.title)}</div><div class="sc-artist">${esc(s.artist)}</div></div>`;
+  // initial idle reel
+  reel.innerHTML=known.map(cell).join("");
+  let spinning=false;
+  btn.onclick=()=>{
+    if(spinning) return; spinning=true; pick.innerHTML=""; btn.disabled=true; btn.textContent="Spinning\u2026";
+    const winner=known[Math.floor(Math.random()*known.length)];
+    // build a long strip that ends on the winner
+    const strip=[];
+    const spins=18+Math.floor(Math.random()*8);
+    for(let i=0;i<spins;i++) strip.push(known[Math.floor(Math.random()*known.length)]);
+    strip.push(winner);
+    reel.innerHTML=strip.map(cell).join("");
+    const cellH=72;
+    reel.style.transition="none"; reel.style.transform="translateY(0)";
+    // force reflow then animate to last cell
+    void reel.offsetHeight;
+    const target=(strip.length-1)*cellH;
+    const dur=2600+Math.random()*700;
+    reel.style.transition=`transform ${dur}ms cubic-bezier(.12,.7,.16,1)`;
+    reel.style.transform=`translateY(-${target}px)`;
+    setTimeout(()=>{
+      spinning=false; btn.disabled=false; btn.textContent="Spin again";
+      pick.innerHTML=`<div class="pick-card" data-open="${winner.id}">
+        <div class="pick-label">Play this one</div>
+        <div class="pick-title">${esc(winner.title)}</div>
+        <div class="pick-artist">${esc(winner.artist)}</div>
+        <div class="pick-tap">Tap to open the song &rarr;</div></div>`;
+    },dur+60);
+  };
+}
+
 function render(){
   const r=route();
   if(r.view!=="song" && detachNotes){ detachNotes(); detachNotes=null; notesSongId=null; currentNotes=[]; }
   if(r.view==="home") renderHome();
   else if(r.view==="song") renderSong(r.id);
   else if(r.view==="people") renderPeople();
+  else if(r.view==="spin") renderSpin();
   else if(r.view==="user") renderUser(r.uid);
   else renderHome();
 }
 
 /* ---------- global clicks ---------- */
 document.addEventListener("click",e=>{
+  const col=e.target.closest("[data-collapse]"); if(col){ const k=col.getAttribute("data-collapse"); collapsed[k]=!collapsed[k]; render(); return; }
+  const ex=e.target.closest("[data-expand]"); if(ex){ const ta=$(ex.getAttribute("data-expand")); if(ta){ const on=ta.classList.toggle("expanded"); ex.textContent=on?"Collapse":"Expand"; } return; }
   const ar=e.target.closest("[data-arename]"); if(ar){ e.stopPropagation(); adminRenameSheet(ar.getAttribute("data-arename")); return; }
   const arm=e.target.closest("[data-aremove]"); if(arm){ e.stopPropagation(); adminRemoveSheet(arm.getAttribute("data-aremove")); return; }
   const g=e.target.closest("[data-go]"); if(g){ go(g.getAttribute("data-go")); return; }
