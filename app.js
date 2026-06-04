@@ -90,7 +90,7 @@ function newCode(){
   const n=Math.random().toString(36).slice(2,6).toUpperCase();
   return w+"-"+n;
 }
-function normalizeCode(s){ return String(s||"").trim().toLowerCase().replace(/\s+/g,"").replace(/[^a-z0-9-]/g,""); }
+function normalizeCode(s){ return String(s||"").trim().replace(/\s+/g,"").replace(/[^A-Za-z0-9-]/g,""); }
 function localId(){
   let id=null; try{ id=localStorage.getItem("cf-uid"); }catch(e){}
   if(!id){ id=newCode(); try{localStorage.setItem("cf-uid",id);}catch(e){} }
@@ -113,12 +113,18 @@ function saveProfile(name,color){
 async function restoreProfile(code){
   const id=normalizeCode(code);
   if(!id) return null;
-  let snap; try{ snap=await F.getDoc(F.doc(db,"users",id)); }catch(e){ return null; }
-  if(!snap.exists()) return null;
+  // Firestore doc ids are case-sensitive. Codes are shown with capital letters, so try
+  // the exact text first, then a lowercase fallback for older all-lowercase ids.
+  const tries=[id]; const lower=id.toLowerCase(); if(lower!==id) tries.push(lower);
+  let snap=null, foundId=null;
+  for(const t of tries){
+    try{ const s=await F.getDoc(F.doc(db,"users",t)); if(s.exists()){ snap=s; foundId=t; break; } }catch(e){}
+  }
+  if(!snap) return null;
   const d=snap.data();
-  setLocalId(id);
-  try{ localStorage.setItem("cf-name",d.name||"Friend"); localStorage.setItem("cf-color",d.color||colorFor(id)); }catch(e){}
-  me={uid:id,name:d.name||"Friend",color:d.color||colorFor(id)};
+  setLocalId(foundId);
+  try{ localStorage.setItem("cf-name",d.name||"Friend"); localStorage.setItem("cf-color",d.color||colorFor(foundId)); }catch(e){}
+  me={uid:foundId,name:d.name||"Friend",color:d.color||colorFor(foundId)};
   return me;
 }
 function setAdmin(on){ isAdmin=on; try{ on?localStorage.setItem("cf-admin","1"):localStorage.removeItem("cf-admin"); }catch(e){} }
