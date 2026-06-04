@@ -90,7 +90,7 @@ function newCode(){
   const n=Math.random().toString(36).slice(2,6).toUpperCase();
   return w+"-"+n;
 }
-function normalizeCode(s){ return String(s||"").trim().replace(/\s+/g,"").replace(/[^A-Za-z0-9-]/g,""); }
+function normalizeCode(s){ return String(s||"").trim().replace(/\s+/g,"").replace(/[^A-Za-z0-9_-]/g,""); }
 function localId(){
   let id=null; try{ id=localStorage.getItem("cf-uid"); }catch(e){}
   if(!id){ id=newCode(); try{localStorage.setItem("cf-uid",id);}catch(e){} }
