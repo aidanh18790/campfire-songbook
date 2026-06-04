@@ -244,3 +244,13 @@
   .newg button{font-weight:600;font-size:14px;color:var(--cream);background:var(--card-hi);border:1px solid var(--line);border-radius:11px;padding:0 16px;cursor:pointer;}
   .save{width:100%;font-weight:700;font-size:17px;color:#241006;background:linear-gradient(180deg,var(--amber) 0%,#d99b3c 100%);border:none;border-radius:14px;padding:16px;cursor:pointer;margin-top:6px;transition:transform .12s,opacity .2s;}
   .save:active{transform:scale(.985);} .save:disabled{opacity:.4;}
+
+  /* Landscape lock — keep the app upright on phones */
+  .rotate-lock{display:none;}
+  @media screen and (orientation:landscape) and (max-height:550px){
+    .rotate-lock{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      text-align:center;padding:24px;background:linear-gradient(180deg,#120c07 0%,var(--bg) 60%,var(--bg2) 100%);}
+    .rotate-lock .flame{width:46px;height:58px;margin-bottom:16px;animation:flicker 5.5s ease-in-out infinite;}
+    .rotate-lock .rl-title{font-family:'Fraunces',serif;font-weight:800;font-size:24px;letter-spacing:-.02em;color:var(--cream);}
+    .rotate-lock .rl-sub{color:var(--muted);font-size:14px;margin-top:8px;}
+  }

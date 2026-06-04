@@ -555,18 +555,19 @@ function openAddSheet(){
   openSheet(`<h2>Add a song</h2><p class="sh-sub">It joins the shared songbook for everyone</p>
     <div class="field"><label>Song title</label><input class="txt" id="f-title" placeholder="e.g. Wagon Wheel" autocomplete="off"></div>
     <div class="field"><label>Artist</label><input class="txt" id="f-artist" placeholder="e.g. Darius Rucker" autocomplete="off"></div>
-    <div class="field"><label>Genres (tap any that fit)</label><div class="gpick" id="gpick">${chips}</div>
+    <div class="field"><label>Genres (optional &mdash; tap any that fit)</label><div class="gpick" id="gpick">${chips}</div>
       <div class="newg"><input class="txt" id="f-newg" placeholder="Add a new genre&hellip;" autocomplete="off"><button id="addg">Add</button></div></div>
     <button class="save" id="savesong" disabled>Add to songbook</button>`);
-  const valid=()=>{ $("savesong").disabled=!$("f-title").value.trim()||pickGenres.size===0; };
+  const valid=()=>{ $("savesong").disabled=!$("f-title").value.trim()||!$("f-artist").value.trim(); };
   const repaint=()=>sheet.querySelectorAll("[data-pick]").forEach(b=>b.classList.toggle("on",pickGenres.has(b.getAttribute("data-pick"))));
   sheet.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ const g=b.getAttribute("data-pick"); pickGenres.has(g)?pickGenres.delete(g):pickGenres.add(g); repaint(); valid(); });
   $("f-title").addEventListener("input",valid);
+  $("f-artist").addEventListener("input",valid);
   $("addg").onclick=()=>{ const v=$("f-newg").value.trim(); if(!v)return; const g=v.replace(/\s+/g," "); pickGenres.add(g);
     const c=document.createElement("button"); c.className="chip on"; c.style.setProperty("--gc",gcolor(g)); c.setAttribute("data-pick",g); c.innerHTML=`<span class="dot"></span>${esc(g)}`;
     c.onclick=()=>{ pickGenres.has(g)?pickGenres.delete(g):pickGenres.add(g); c.classList.toggle("on"); valid(); }; $("gpick").appendChild(c); $("f-newg").value=""; valid(); };
   $("f-newg").addEventListener("keydown",ev=>{ if(ev.key==="Enter"){ev.preventDefault();$("addg").click();} });
-  $("savesong").onclick=()=>{ const t=$("f-title").value.trim(), a=$("f-artist").value.trim()||"Unknown"; if(!t||!pickGenres.size)return;
+  $("savesong").onclick=()=>{ const t=$("f-title").value.trim(), a=$("f-artist").value.trim(); if(!t||!a)return;
     const norm=x=>x.toLowerCase().replace(/[^a-z0-9]/g,"");
     const dupes=songs.filter(s=>norm(s.title)===norm(t));
     if(dupes.length){ confirmDuplicate(t,a,[...pickGenres],dupes); return; }
@@ -724,6 +725,7 @@ function showNewCode(){
    BOOT
    ============================================================ */
 if(navigator.storage&&navigator.storage.persist){ navigator.storage.persist().catch(()=>{}); }
+if(screen.orientation&&screen.orientation.lock){ screen.orientation.lock("portrait").catch(()=>{}); }
 if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }
 
 (async function boot(){
