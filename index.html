@@ -353,6 +353,7 @@ let noRepeats=false, spinPlayed=new Set();
 let lastUserView=null;
 let isAdmin=(()=>{try{return localStorage.getItem("cf-admin")==="1";}catch(e){return false;}})();
 let detachNotes=null, currentNotes=[], notesSongId=null, lastSong=null;
+let myPersonalNotes={};  // songId -> text, populated by the notes listener, survives navigation
 
 const CODE_WORDS=["ember","cedar","river","willow","maple","aspen","spruce","birch","pine","fern","moss","creek","ridge","cabin","trail","flint","spark","glow","drift","stone"];
 function newCode(){
@@ -417,16 +418,15 @@ async function ensureSeed(){
   if(snap.exists()) return;
   const batch=F.writeBatch(db);
   seedRows().forEach((r,i)=>{ const ref=F.doc(F.collection(db,"songs"));
-    batch.set(ref,{title:r[0],artist:r[1],genres:r[2].split(",").map(g=>g.trim()),sortKey:i,addedBy:"seed",addedByName:"Songbook",communalNotes:""}); });
+    batch.set(ref,{title:r[0],artist:r[1],genres:r[2].split(",").map(g=>g.trim()),sortKey:i,addedBy:"seed",addedByName:"Songbook"}); });
   batch.set(metaRef,{seeded:true,at:F.serverTimestamp()});
   await batch.commit();
 }
 async function addSong(title,artist,genres){
-  await F.addDoc(F.collection(db,"songs"),{title,artist,genres,sortKey:Date.now(),addedBy:me.uid,addedByName:me.name,communalNotes:""});
+  await F.addDoc(F.collection(db,"songs"),{title,artist,genres,sortKey:Date.now(),addedBy:me.uid,addedByName:me.name});
 }
 async function deleteSong(id){ await F.deleteDoc(F.doc(db,"songs",id)); }
 async function saveSongFields(id,fields){ await F.updateDoc(F.doc(db,"songs",id),fields); }
-async function saveCommunal(id,text){ await F.updateDoc(F.doc(db,"songs",id),{communalNotes:text,communalBy:me.name,communalAt:F.serverTimestamp()}); }
 async function savePersonalNote(songId,text){
   const ref=F.doc(db,"songs",songId,"notes",me.uid);
   if(text.trim()) await F.setDoc(ref,{text:text.trim(),name:me.name,color:me.color,uid:me.uid,updatedAt:F.serverTimestamp()});
@@ -595,7 +595,7 @@ function renderSong(id){
   if(notesSongId!==id) currentNotes=[];
   const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
   const addedLink = s.addedBy && s.addedBy!=="seed" ? `Added by <a data-go="/user/${s.addedBy}">${esc(nameOf(s.addedBy,s.addedByName))}</a>` : `From the original songbook`;
-  const myNote = currentNotes.find(n=>n.uid===me.uid);
+  const myNoteText = myPersonalNotes[id] !== undefined ? myPersonalNotes[id] : (currentNotes.find(n=>n.uid===me.uid)||{text:""}).text;
   const others = currentNotes.filter(n=>n.uid!==me.uid);
   const othersHtml = others.length?others.map(n=>`
     <div class="noteitem"><div class="notewho" data-go="/user/${n.uid}">${avatar(nameOf(n.uid,n.name),colorOf(n.uid,n.color),22)}<span class="nm">${esc(nameOf(n.uid,n.name))}</span></div>
@@ -615,24 +615,17 @@ function renderSong(id){
       <button class="sbtn known ${e.status==='known'?'on':''}" data-set="known" data-id="${id}">Currently Know</button>
       <button class="star ${e.starred?'on':''}" data-star="${id}" aria-label="favorite">${starSvg(e.starred)}</button></div></div>
     ${supplyDemandSection(id)}
-    <div class="section"><h3>Shared notes &amp; links <button class="expandtog" data-expand="commnotes">Expand</button></h3>
-      <textarea class="notes" id="commnotes" placeholder="Capo, chords, links&hellip; everyone can edit this.">${esc(s.communalNotes||"")}</textarea>
-      <button class="savenote" id="savecomm" disabled>Save shared notes</button><span class="savedmsg" id="commsaved"></span>
-      ${s.communalBy?`<div class="editedby">Last edited by ${esc(s.communalBy)}</div>`:""}</div>
     <div class="section"><h3>My notes <button class="expandtog" data-expand="mynotes">Expand</button></h3>
-      <textarea class="notes" id="mynotes" placeholder="Your own notes (everyone can see these too).">${esc(myNote?myNote.text:"")}</textarea>
+      <textarea class="notes" id="mynotes" placeholder="Your own notes (everyone can see these too).">${esc(myNoteText)}</textarea>
       <button class="savenote" id="savemine" disabled>Save my notes</button><span class="savedmsg" id="minesaved"></span></div>
     <div class="section"><h3>Everyone&rsquo;s notes</h3><div class="notefeed">${othersHtml}</div></div>
     <button class="ghostbtn danger" id="delsong">Delete this song from the songbook</button>`;
-  const _cap={comm:(()=>{const el=$("commnotes");return el?el.value:null;})(),mine:(()=>{const el=$("mynotes");return el?el.value:null;})(),
-    commEx:(()=>{const el=$("commnotes");return el?el.classList.contains("expanded"):false;})(),
+  const _cap={mine:(()=>{const el=$("mynotes");return el?el.value:null;})(),
     mineEx:(()=>{const el=$("mynotes");return el?el.classList.contains("expanded"):false;})(),
     focus:document.activeElement&&document.activeElement.id,sel:(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null};
   root.innerHTML=chrome(inner,"home");
   if(lastSong===id){
-    if(_cap.comm!=null){const el=$("commnotes");if(el){el.value=_cap.comm;const sc=$("savecomm");if(sc)sc.disabled=(el.value===(s.communalNotes||""));}}
-    if(_cap.mine!=null){const el=$("mynotes");if(el){el.value=_cap.mine;const sm=$("savemine");if(sm)sm.disabled=(el.value.trim()===(myNote?myNote.text:"").trim());}}
-    if(_cap.commEx){const el=$("commnotes");if(el){el.classList.add("expanded");const t=document.querySelector('[data-expand="commnotes"]');if(t)t.textContent="Collapse";}}
+    if(_cap.mine!=null){const el=$("mynotes");if(el){el.value=_cap.mine;const sm=$("savemine");if(sm)sm.disabled=(el.value.trim()===myNoteText.trim());}}
     if(_cap.mineEx){const el=$("mynotes");if(el){el.classList.add("expanded");const t=document.querySelector('[data-expand="mynotes"]');if(t)t.textContent="Collapse";}}
     if(_cap.focus){const el=$(_cap.focus);if(el){el.focus();if(_cap.sel!=null){try{el.setSelectionRange(_cap.sel,_cap.sel);}catch(e){}}}}
   }
@@ -640,15 +633,18 @@ function renderSong(id){
   if(notesSongId!==id){
     if(detachNotes){detachNotes();detachNotes=null;}
     notesSongId=id;
-    detachNotes=F.onSnapshot(F.collection(db,"songs",id,"notes"),snap=>{ currentNotes=snap.docs.map(d=>({uid:d.id,...d.data()})); const r=route(); if(r.view==="song"&&r.id===id) renderSong(id); });
+    detachNotes=F.onSnapshot(F.collection(db,"songs",id,"notes"),snap=>{
+      currentNotes=snap.docs.map(d=>({uid:d.id,...d.data()}));
+      const mine=currentNotes.find(n=>n.uid===me.uid);
+      if(mine) myPersonalNotes[id]=mine.text;
+      else if(myPersonalNotes[id]===undefined) myPersonalNotes[id]="";
+      const r=route(); if(r.view==="song"&&r.id===id) renderSong(id);
+    });
   }
   $("editsong").onclick=()=>openEditSong(id);
-  const comm=$("commnotes"), savecomm=$("savecomm");
-  comm.addEventListener("input",()=>{ savecomm.disabled = comm.value===(s.communalNotes||""); });
-  savecomm.onclick=async()=>{ savecomm.disabled=true; await saveCommunal(id,comm.value); $("commsaved").textContent="Saved"; setTimeout(()=>{const m=$("commsaved");if(m)m.textContent="";},1500); };
-  const mine=$("mynotes"), savemine=$("savemine"); const orig=myNote?myNote.text:"";
+  const mine=$("mynotes"), savemine=$("savemine"); const orig=myNoteText;
   mine.addEventListener("input",()=>{ savemine.disabled = mine.value.trim()===orig.trim(); });
-  savemine.onclick=async()=>{ savemine.disabled=true; await savePersonalNote(id,mine.value); $("minesaved").textContent="Saved"; setTimeout(()=>{const m=$("minesaved");if(m)m.textContent="";},1500); };
+  savemine.onclick=async()=>{ savemine.disabled=true; myPersonalNotes[id]=mine.value; await savePersonalNote(id,mine.value); $("minesaved").textContent="Saved"; setTimeout(()=>{const m=$("minesaved");if(m)m.textContent="";},1500); };
   $("delsong").onclick=async()=>{ const b=$("delsong");
     if(b.dataset.confirm){ await deleteSong(id); go("/"); }
     else{ b.dataset.confirm="1"; b.textContent="Tap again to permanently delete"; setTimeout(()=>{const x=$("delsong");if(x){delete x.dataset.confirm;x.textContent="Delete this song from the songbook";}},3000); } };
