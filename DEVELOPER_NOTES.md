@@ -1,7 +1,7 @@
 # Campfire Songbook — Developer Notes
 
 A plain-English map of how the app works, so future-you (or a future Claude session)
-can pick it back up quickly. Last updated at cache version **campfire-v19**.
+can pick it back up quickly. Last updated at cache version **campfire-v20**.
 
 ---
 

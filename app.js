@@ -38,23 +38,34 @@ const knownIcon=`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" str
 const todoIcon=`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l3 2"/></svg>`;
 const learningIcon=`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3.5v8"/><circle cx="12.6" cy="12.2" r="2.4"/><path d="M15 3.5l-7 1.8v8.2"/><circle cx="5.6" cy="14.6" r="2.4"/></svg>`;
 
-/* ---------- difficulty (a 1-5 scale, NOT stars: bars that fill easy->hard) ---------- */
+/* ---------- difficulty (a 0.5-5 scale in half steps = a 10-point system; NOT stars) ---------- */
 const LEARNING_LIMIT=3;
-const DIFF_LABELS=["Tap to rate","Easy","Easy-ish","Medium","Tough","Very tough"];
-function diffColor(level){ return ({1:"#8fc06a",2:"#bcc25a",3:"#e8b35a",4:"#e08a4a",5:"#dd6048"})[Math.round(level)]||"var(--faint)"; }
-// Static little meter used on list rows (read-only display).
+function diffColor(level){ return ({1:"#8fc06a",2:"#bcc25a",3:"#e8b35a",4:"#e08a4a",5:"#dd6048"})[Math.round(level)||1]||"var(--faint)"; }
+function diffLabel(v){ return `${(+v).toFixed(1)} / 5`; }
+// Static little meter used on list rows (read-only). Bars fill bottom-up; a half value
+// leaves the top bar half-lit.
 function diffBars(level){
-  const r=Math.max(0,Math.min(5,Math.round(level||0))); const col=diffColor(r); let out="";
-  for(let i=1;i<=5;i++) out+=`<i class="db${i<=r?' on':''}"${i<=r?` style="background:${col}"`:''}></i>`;
+  const v=Math.max(0,Math.min(5,level||0)); const col=diffColor(v); let out="";
+  for(let i=1;i<=5;i++){
+    if(v>=i) out+=`<i class="db on" style="background:${col}"></i>`;
+    else if(v>=i-0.5) out+=`<i class="db half" style="background:linear-gradient(to top,${col} 52%,var(--line-hi) 52%)"></i>`;
+    else out+=`<i class="db"></i>`;
+  }
   return out;
 }
 function diffChip(level,title){ if(!level) return ""; return `<span class="cdiff" title="${esc(title||('Difficulty '+(+level).toFixed(1)+'/5'))}">${diffBars(level)}</span>`; }
-// Interactive rater (song page + roulette). Click a segment to set, click the current value to clear.
+// Interactive rater (song page + roulette). Each segment has two tap zones: the left half
+// sets the .5 value, the right half sets the whole. Tapping the current value clears it.
 function diffRater(songId,current){
-  let segs="";
-  for(let i=1;i<=5;i++){ const on=current&&i<=current;
-    segs+=`<button class="dseg${on?' on':''}" data-diff="${songId}" data-difflevel="${i}"${on?` style="background:${diffColor(current)};border-color:${diffColor(current)}"`:''} aria-label="difficulty ${i} of 5"></button>`; }
-  return `<div class="diffrater"><div class="dsegs">${segs}</div><span class="dlabel">${current?esc(DIFF_LABELS[current]):"Tap to rate"}</span></div>`;
+  const v=current||0; let segs="";
+  for(let i=1;i<=5;i++){
+    const col=diffColor(i);
+    const fill = v>=i?`width:100%;background:${col}` : v>=i-0.5?`width:50%;background:${col}` : `width:0`;
+    segs+=`<span class="dseg"><span class="dfill" style="${fill}"></span>`+
+      `<span class="dhalf l" data-diff="${songId}" data-difflevel="${i-0.5}" aria-label="difficulty ${i-0.5}"></span>`+
+      `<span class="dhalf r" data-diff="${songId}" data-difflevel="${i}" aria-label="difficulty ${i}"></span></span>`;
+  }
+  return `<div class="diffrater"><div class="dsegs">${segs}</div><span class="dlabel">${current?diffLabel(current):"Tap to rate"}</span></div>`;
 }
 // Average difficulty across everyone (from the collection-group rollup in allLists).
 function avgDiff(id){ const sd=allLists[id]; if(!sd||!sd.diffs||!sd.diffs.length) return null; const sum=sd.diffs.reduce((a,b)=>a+b,0); return {value:sum/sd.diffs.length,count:sd.diffs.length}; }
@@ -601,7 +612,7 @@ document.addEventListener("click",e=>{
   const ex=e.target.closest("[data-expand]"); if(ex){ const ta=$(ex.getAttribute("data-expand")); if(ta){ const on=ta.classList.toggle("expanded"); ex.textContent=on?"Collapse":"Expand"; } return; }
   const ar=e.target.closest("[data-arename]"); if(ar){ e.stopPropagation(); adminRenameSheet(ar.getAttribute("data-arename")); return; }
   const arm=e.target.closest("[data-aremove]"); if(arm){ e.stopPropagation(); adminRemoveSheet(arm.getAttribute("data-aremove")); return; }
-  const dr=e.target.closest("[data-diff]"); if(dr){ e.stopPropagation(); const sid=dr.getAttribute("data-diff"); const lvl=parseInt(dr.getAttribute("data-difflevel"),10); setDifficulty(sid,lvl); return; }
+  const dr=e.target.closest("[data-diff]"); if(dr){ e.stopPropagation(); const sid=dr.getAttribute("data-diff"); const lvl=parseFloat(dr.getAttribute("data-difflevel")); setDifficulty(sid,lvl); return; }
   const g=e.target.closest("[data-go]"); if(g){ go(g.getAttribute("data-go")); return; }
   if(e.target.closest("[data-back]")){ history.length>1?history.back():go("/"); return; }
   const open=e.target.closest("[data-open]"); if(open){ closeSheet(); go("/song/"+open.getAttribute("data-open")); return; }

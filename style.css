@@ -142,11 +142,14 @@
   .sbtn.todo.on{background:var(--todo);color:#241a06;border-color:transparent;}
   .sbtn.known.on{background:var(--known);color:#14210b;border-color:transparent;}
   .sbtn.learning.on{background:var(--learning);color:#062730;border-color:transparent;}
-  /* interactive difficulty rater (song page + roulette) */
+  /* interactive difficulty rater (song page + roulette) — half-steps via left/right tap zones */
   .diffrater{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
   .dsegs{display:inline-flex;gap:6px;}
-  .dseg{width:34px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--card-hi);cursor:pointer;padding:0;transition:transform .12s,background .15s,border-color .15s;}
-  .dseg:active{transform:scale(.9);}
+  .dseg{position:relative;width:34px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--card-hi);overflow:hidden;flex:0 0 auto;}
+  .dseg .dfill{position:absolute;left:0;top:0;bottom:0;width:0;transition:width .12s;}
+  .dseg .dhalf{position:absolute;top:0;bottom:0;width:50%;cursor:pointer;z-index:2;}
+  .dseg .dhalf.l{left:0;} .dseg .dhalf.r{right:0;}
+  .dseg .dhalf:active{background:rgba(246,236,219,.07);}
   .dlabel{color:var(--muted);font-size:13.5px;font-weight:600;}
   .diffavg{color:var(--faint);font-size:13px;margin-top:12px;} .diffavg b{color:var(--cream);}
   textarea.notes{width:100%;font-family:inherit;font-size:15px;line-height:1.5;color:var(--cream);background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:12px;padding:13px;outline:none;resize:none;height:96px;overflow-y:auto;transition:border-color .2s,height .2s;}
