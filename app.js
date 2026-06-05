@@ -138,9 +138,13 @@ function seedRows(){
 let me=null;                 // {uid,name,color}
 let songs=[], songsMap={}, myLists={}, usersMap={}, allLists={};
 let query="", activeGenres=new Set(), excludeGenres=new Set(), online=navigator.onLine, started=false;
+let addedByFilter=null;        // home: filter songs by who added them (uid or "seed"), null = anyone
 let sortMode="added", sortDir="desc";  // added|known|todo|difficulty ; desc|asc
 let collapsed={known:false,todo:false,learning:false};
-let userGenres=new Set();  // genre filter on the personal page
+// Personal-page filters/sorters — mirror the home page but kept independent so filtering
+// your own lists never changes the main page (and vice versa). Reset when you switch people.
+let uQuery="", userGenresInc=new Set(), userGenresExc=new Set(), uSort="added", uSortDir="desc", uAdder=null;
+let scrollMem={};              // remembers each list view's scroll so leaving/returning doesn't jump to top
 let noRepeats=false, spinPlayed=new Set();
 let lastSpinPick=null;     // id of the song the wheel last landed on (survives re-renders so rating it doesn't wipe the reveal)
 let lastUserView=null;
@@ -225,7 +229,8 @@ async function ensureSeed(){
   await batch.commit();
 }
 async function addSong(title,artist,genres){
-  await F.addDoc(F.collection(db,"songs"),{title,artist,genres,sortKey:Date.now(),addedBy:me.uid,addedByName:me.name});
+  const ref=await F.addDoc(F.collection(db,"songs"),{title,artist,genres,sortKey:Date.now(),addedBy:me.uid,addedByName:me.name});
+  return ref.id;
 }
 async function deleteSong(id){ await F.deleteDoc(F.doc(db,"songs",id)); }
 async function saveSongFields(id,fields){ await F.updateDoc(F.doc(db,"songs",id),fields); }
@@ -352,26 +357,47 @@ function allGenres(){
   const known=Object.keys(GENRE_COLORS).filter(g=>set.has(g));
   const extra=[...set].filter(g=>!GENRE_COLORS[g]).sort(); return [...known,...extra];
 }
-function filteredSongs(){
-  const q=query.trim().toLowerCase();
-  const out=songs.filter(s=>{ const mq=!q||s.title.toLowerCase().includes(q)||s.artist.toLowerCase().includes(q);
-    const g=s.genres||[];
-    const mInc=activeGenres.size===0||g.some(x=>activeGenres.has(x));
-    const mExc=excludeGenres.size===0||!g.some(x=>excludeGenres.has(x));
-    return mq&&mInc&&mExc; });
+// Distinct adders across a set of songs, as [key,label] pairs. key is the uid (or "seed").
+function addersOf(list){
+  const m=new Map();
+  list.forEach(s=>{ const k=s.addedBy||"seed"; if(!m.has(k)) m.set(k, k==="seed"?"Songbook":nameOf(k,s.addedByName)); });
+  return [...m.entries()].sort((a,b)=> a[0]==="seed"?-1 : b[0]==="seed"?1 : a[1].localeCompare(b[1]));
+}
+// Shared filter predicate used by the home AND personal pages.
+function songMatches(s,q,inc,exc,adder){
+  const g=s.genres||[];
+  const mq=!q||s.title.toLowerCase().includes(q)||s.artist.toLowerCase().includes(q);
+  const mInc=inc.size===0||g.some(x=>inc.has(x));
+  const mExc=exc.size===0||!g.some(x=>exc.has(x));
+  const mAdder=!adder||(s.addedBy||"seed")===adder;
+  return mq&&mInc&&mExc&&mAdder;
+}
+// Shared sort comparator (operates on song objects) used by both pages.
+function songCmp(mode,dir){
   const cnt=s=>allLists[s.id]||{known:[],todo:[],learning:[],diffs:[]};
-  const metric=s=> sortMode==="known"?cnt(s).known.length : sortMode==="todo"?cnt(s).todo.length : (s.sortKey||0);
-  out.sort((a,b)=>{
-    if(sortMode==="difficulty"){
+  const metric=s=> mode==="known"?cnt(s).known.length : mode==="todo"?cnt(s).todo.length : (s.sortKey||0);
+  return (a,b)=>{
+    if(mode==="difficulty"){
       const da=avgDiff(a.id), db_=avgDiff(b.id), va=da?da.value:null, vb=db_?db_.value:null;
       if(va==null&&vb==null) return a.title.localeCompare(b.title);
       if(va==null) return 1; if(vb==null) return -1;          // unrated songs sink to the bottom either way
-      if(va!==vb) return sortDir==="asc"?va-vb:vb-va;
+      if(va!==vb) return dir==="asc"?va-vb:vb-va;
       return a.title.localeCompare(b.title);
     }
-    const d=metric(a)-metric(b); if(d!==0) return sortDir==="asc"?d:-d;
-    return a.title.localeCompare(b.title); });   // stable tiebreak by title
-  return out;
+    const d=metric(a)-metric(b); if(d!==0) return dir==="asc"?d:-d;
+    return a.title.localeCompare(b.title);   // stable tiebreak by title
+  };
+}
+// Remember/restore a list view's scroll position across re-renders and navigation,
+// so leaving a song (or rating one) doesn't snap the list back to the top.
+function keepScroll(key){
+  const w=document.querySelector(".wrap"); if(!w) return;
+  w.scrollTop = scrollMem[key]||0;
+  w.addEventListener("scroll",()=>{ scrollMem[key]=w.scrollTop; },{passive:true});
+}
+function filteredSongs(){
+  const q=query.trim().toLowerCase();
+  return songs.filter(s=>songMatches(s,q,activeGenres,excludeGenres,addedByFilter)).sort(songCmp(sortMode,sortDir));
 }
 function renderHome(){
   const chips=[`<button class="chip all ${(activeGenres.size===0&&excludeGenres.size===0)?'on':''}" data-genre="__all">All</button>`]
@@ -380,12 +406,20 @@ function renderHome(){
       return `<button class="chip ${inc?'on':''} ${exc?'exc':''}" style="--gc:${gcolor(g)}" data-genre="${esc(g)}"><span class="dot"></span>${esc(g)}</button>`;
     })).join("");
   const rows=filteredSongs(); const inc=[...activeGenres], exc=[...excludeGenres];
+  const adders=addersOf(songs);
+  const adderRow = adders.length>=2
+    ? `<div class="filters" id="adderfilter"><button class="chip all ${!addedByFilter?'on':''}" data-addedby="__all">Anyone</button>`+
+      adders.map(([k,label])=>`<button class="chip ${addedByFilter===k?'on':''}" data-addedby="${esc(k)}">${avatar(label,k==="seed"?"#c8a86a":colorOf(k),16)}${esc(label)}</button>`).join("")+`</div>`
+    : "";
+  const adderName = addedByFilter ? (addedByFilter==="seed"?"Songbook":nameOf(addedByFilter,"someone")) : null;
   let showing;
   if(inc.length||exc.length){
     const parts=[]; if(inc.length)parts.push(inc.join(" / ")); if(exc.length)parts.push("no "+exc.join(" / "));
+    if(adderName)parts.push("by "+adderName);
     showing=`${rows.length} song${rows.length!==1?"s":""} \u00b7 ${parts.join(", ")}`;
-  } else showing=query?`${rows.length} match${rows.length!==1?"es":""}`:"All songs";
-  const active=(activeGenres.size||excludeGenres.size||query);
+  } else if(adderName) showing=`${rows.length} song${rows.length!==1?"s":""} \u00b7 by ${adderName}`;
+  else showing=query?`${rows.length} match${rows.length!==1?"es":""}`:"All songs";
+  const active=(activeGenres.size||excludeGenres.size||query||addedByFilter);
   const arrow=m=> sortMode!==m?"" : (sortDir==="desc"?" \u2193":" \u2191");
   const lbl={added:"Date added",known:"Most known",todo:"Most to-do",difficulty:"Difficulty"};
   const sortBtn=m=>`<button class="sortbtn ${sortMode===m?'on':''}" data-sort="${m}">${lbl[m]}${arrow(m)}</button>`;
@@ -396,16 +430,17 @@ function renderHome(){
       <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
         <input id="search" type="text" placeholder="Search songs or artists&hellip;" autocomplete="off" value="${esc(query)}"></div>
       <div class="filters" id="filters">${chips}</div>
+      ${adderRow}
       <div class="sortbar" id="sortbar">${sortBtn("added")}${sortBtn("known")}${sortBtn("todo")}${sortBtn("difficulty")}</div>
       <div class="meta"><span>${showing}</span><span class="clear ${active?'show':''}" id="clear">Clear</span></div>
     </div>
     <div class="list home-list">${rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`}</div>`;
-  const _wrapScroll=(()=>{const w=document.querySelector(".wrap");return w?w.scrollTop:0;})();
   const _filScroll=(()=>{const f=$("filters");return f?f.scrollLeft:0;})();
   root.innerHTML=chrome(inner,"home")+`<button class="fab" id="fab"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>Add a Song</button>`+`<button class="totop" id="totop"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14V5M4 9l5-5 5 5"/></svg>Top</button>`;
-  (()=>{const w=document.querySelector(".wrap");if(w)w.scrollTop=_wrapScroll;const f=$("filters");if(f)f.scrollLeft=_filScroll;})();
+  (()=>{const f=$("filters");if(f)f.scrollLeft=_filScroll;})();
+  keepScroll("home");
   const si=$("search"); if(si){ si.addEventListener("input",e=>{ query=e.target.value; renderHome(); const n=$("search"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }); }
-  $("fab").onclick=openAddSheet; const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();excludeGenres.clear();query="";renderHome();};
+  $("fab").onclick=openAddSheet; const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();excludeGenres.clear();query="";addedByFilter=null;renderHome();};
   const wrap=document.querySelector(".wrap"), tt=$("totop");
   if(wrap&&tt){
     const upd=()=>tt.classList.toggle("show",wrap.scrollTop>260);
@@ -518,38 +553,67 @@ function listItem(s,starred,difficulty){
 }
 async function renderUser(uid){
   if(!uid){ root.innerHTML=chrome(`<div class="empty"><div class="big">No user</div></div>`,"user"); return; }
-  if(lastUserView!==uid){ userGenres.clear(); lastUserView=uid; }
+  if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="added"; uSortDir="desc"; uAdder=null; lastUserView=uid; }
   const isMe=uid===me.uid;
   const pname=nameOf(uid,isMe?me.name:"Friend"), pcolor=colorOf(uid,isMe?me.color:null);
   let entries={};
   try{ const snap=await F.getDocs(F.collection(db,"users",uid,"lists")); snap.docs.forEach(d=>entries[d.id]=d.data()); }catch(err){ console.error(err); }
-  const collect=status=>Object.entries(entries).filter(([id,v])=>v.status===status&&songsMap[id])
-    .map(([id,v])=>({s:songsMap[id],starred:!!v.starred,difficulty:v.difficulty||null}))
-    .filter(it=> userGenres.size===0 || (it.s.genres||[]).some(g=>userGenres.has(g)))
-    .sort((a,b)=>(b.starred?1:0)-(a.starred?1:0)||a.s.title.localeCompare(b.s.title));
+  const uq=uQuery.trim().toLowerCase();
+  const cmp=songCmp(uSort,uSortDir);
+  const collect=status=>{
+    const items=Object.entries(entries).filter(([id,v])=>v.status===status&&songsMap[id])
+      .map(([id,v])=>({s:songsMap[id],starred:!!v.starred,difficulty:v.difficulty||null}))
+      .filter(it=>songMatches(it.s,uq,userGenresInc,userGenresExc,uAdder));
+    items.sort((a,b)=>cmp(a.s,b.s));
+    return items;
+  };
   const learning=collect("learning"), known=collect("known"), todo=collect("todo");
-  // genre chips built from everything this person has in any list
-  const ugSet=new Set();
-  Object.entries(entries).forEach(([id,v])=>{ if((v.status==='known'||v.status==='todo'||v.status==='learning')&&songsMap[id]) (songsMap[id].genres||[]).forEach(g=>ugSet.add(g)); });
+  // The person's full song set (any list) — used to build the filter chips so they don't
+  // vanish as you filter.
+  const personSongs=Object.entries(entries)
+    .filter(([id,v])=>(v.status==='known'||v.status==='todo'||v.status==='learning')&&songsMap[id])
+    .map(([id])=>songsMap[id]);
+  const ugSet=new Set(); personSongs.forEach(s=>(s.genres||[]).forEach(g=>ugSet.add(g)));
   const ugKnown=Object.keys(GENRE_COLORS).filter(g=>ugSet.has(g));
   const ugExtra=[...ugSet].filter(g=>!GENRE_COLORS[g]).sort();
   const ugAll=[...ugKnown,...ugExtra];
-  const ugChips = ugAll.length? `<div class="filters" id="ufilters"><button class="chip all ${userGenres.size===0?'on':''}" data-ugenre="__all">All</button>`+
-    ugAll.map(g=>`<button class="chip ${userGenres.has(g)?'on':''}" style="--gc:${gcolor(g)}" data-ugenre="${esc(g)}"><span class="dot"></span>${esc(g)}</button>`).join("")+`</div>` : "";
+  const ugChips = ugAll.length? `<div class="filters" id="ufilters"><button class="chip all ${(userGenresInc.size===0&&userGenresExc.size===0)?'on':''}" data-ugenre="__all">All</button>`+
+    ugAll.map(g=>{const gi=userGenresInc.has(g),ge=userGenresExc.has(g);return `<button class="chip ${gi?'on':''} ${ge?'exc':''}" style="--gc:${gcolor(g)}" data-ugenre="${esc(g)}"><span class="dot"></span>${esc(g)}</button>`;}).join("")+`</div>` : "";
+  const uAdders=addersOf(personSongs);
+  const uAdderRow = uAdders.length>=2 ? `<div class="filters" id="uadderfilter"><button class="chip all ${!uAdder?'on':''}" data-uadder="__all">Anyone</button>`+
+    uAdders.map(([k,label])=>`<button class="chip ${uAdder===k?'on':''}" data-uadder="${esc(k)}">${avatar(label,k==="seed"?"#c8a86a":colorOf(k),16)}${esc(label)}</button>`).join("")+`</div>` : "";
+  const uArrow=m=> uSort!==m?"" : (uSortDir==="desc"?" \u2193":" \u2191");
+  const lbl={added:"Date added",known:"Most known",todo:"Most to-do",difficulty:"Difficulty"};
+  const uSortBtn=m=>`<button class="sortbtn ${uSort===m?'on':''}" data-usort="${m}">${lbl[m]}${uArrow(m)}</button>`;
+  const uActive=(userGenresInc.size||userGenresExc.size||uQuery.trim()||uAdder);
+  const controls=`<div class="homectl" style="margin-top:8px">
+      <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
+        <input id="usearch" type="text" placeholder="Search ${isMe?"your":esc(pname)+"\u2019s"} lists&hellip;" autocomplete="off" value="${esc(uQuery)}"></div>
+      ${ugChips}${uAdderRow}
+      <div class="sortbar">${uSortBtn("added")}${uSortBtn("known")}${uSortBtn("todo")}${uSortBtn("difficulty")}</div>
+      ${uActive?`<div class="meta"><span></span><span class="clear show" data-uclear="1">Clear filters</span></div>`:""}
+    </div>`;
   const sec=(cls,label,items,cap)=>{ const col=collapsed[cls]?" collapsed":"";
     return `<div class="listsec ${cls}${col}"><button class="lh" data-collapse="${cls}"><span class="dot"></span><h2>${label}</h2><span class="ct">${items.length}${cap?` / ${cap}`:""}</span><span class="chev">${collapsed[cls]?"\u203A":"\u2304"}</span></button>
-    <div class="list seclist">${items.length?items.map(it=>listItem(it.s,it.starred,it.difficulty)).join(""):`<div class="empty" style="padding:24px"><div style="color:var(--faint)">${userGenres.size?"Nothing in this genre.":"Nothing here yet."}</div></div>`}</div></div>`; };
+    <div class="list seclist">${items.length?items.map(it=>listItem(it.s,it.starred,it.difficulty)).join(""):`<div class="empty" style="padding:24px"><div style="color:var(--faint)">${uActive?"Nothing matches your filters.":"Nothing here yet."}</div></div>`}</div></div>`; };
   const inner=`
     <div style="display:flex;align-items:center;gap:14px;margin:16px 2px 6px">${avatar(pname,pcolor,56)}
       <div><div class="ptitle" style="margin:0;font-size:26px">${esc(pname)}${isMe?" (you)":""}</div>
       <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${learning.length} learning &middot; ${todo.length} to learn${isMe?` &middot; <button class="edit-pencil" id="editname" style="font-size:13px">Edit name</button> &middot; <button class="edit-pencil" id="codebtn" style="font-size:13px">Recovery code</button> &middot; <button class="edit-pencil" id="adminbtn" style="font-size:13px">Admin${isAdmin?" \u2713":""}</button> &middot; <button class="edit-pencil" id="signoutbtn" style="font-size:13px">Sign out</button>`:""}</div></div></div>
     ${(!isMe&&isAdmin)?`<div style="display:flex;gap:8px;margin:0 2px 4px"><button class="minibtn" data-arename="${uid}">Rename</button><button class="minibtn danger" data-aremove="${uid}">Remove person</button></div>`:""}
     ${isMe?"":`<button class="back" data-go="/people" style="padding-top:4px">&larr; All people</button>`}
-    ${ugChips}
+    ${controls}
     ${sec("learning","Currently Learning",learning,LEARNING_LIMIT)}
     ${sec("known","Currently Know",known)}
     ${sec("todo","To-Do",todo)}`;
+  const _focId=document.activeElement&&document.activeElement.id;
+  const _sel=(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null;
+  const _ufScroll=(()=>{const f=$("ufilters");return f?f.scrollLeft:0;})();
   root.innerHTML=chrome(inner,"user");
+  keepScroll("user:"+uid);
+  (()=>{const f=$("ufilters");if(f)f.scrollLeft=_ufScroll;})();
+  if(_focId){ const el=$(_focId); if(el){ el.focus(); if(_sel!=null){ try{el.setSelectionRange(_sel,_sel);}catch(e){} } } }
+  const usi=$("usearch"); if(usi) usi.addEventListener("input",e=>{ uQuery=e.target.value; renderUser(uid); });
   const en=$("editname"); if(en) en.onclick=openEditName;
   const cb=$("codebtn"); if(cb) cb.onclick=openCodeSheet;
   const ab=$("adminbtn"); if(ab) ab.onclick=openAdminSheet;
@@ -696,11 +760,20 @@ document.addEventListener("click",e=>{
   const star=e.target.closest("[data-star]"); if(star){ e.stopPropagation(); toggleStar(star.getAttribute("data-star")); return; }
   const setb=e.target.closest("[data-set]"); if(setb){ const st=setb.getAttribute("data-set"); const sid=setb.getAttribute("data-id"); const cur=myEntry(sid).status; setStatus(sid, cur===st?null:st); return; }
   const ug=e.target.closest("[data-ugenre]"); if(ug){ const v=ug.getAttribute("data-ugenre");
-    if(v==="__all") userGenres.clear(); else { userGenres.has(v)?userGenres.delete(v):userGenres.add(v); }
+    if(v==="__all"){ userGenresInc.clear(); userGenresExc.clear(); }
+    else if(userGenresInc.has(v)){ userGenresInc.delete(v); userGenresExc.add(v); }       // include -> exclude
+    else if(userGenresExc.has(v)){ userGenresExc.delete(v); }                              // exclude -> off
+    else { userGenresInc.add(v); }                                                         // off -> include
     render(); return; }
+  const uad=e.target.closest("[data-uadder]"); if(uad){ const v=uad.getAttribute("data-uadder"); uAdder=(v==="__all")?null:v; render(); return; }
+  const ust=e.target.closest("[data-usort]"); if(ust){ const m=ust.getAttribute("data-usort");
+    if(uSort===m){ uSortDir=uSortDir==="desc"?"asc":"desc"; } else { uSort=m; uSortDir="desc"; }
+    render(); return; }
+  const ucl=e.target.closest("[data-uclear]"); if(ucl){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uAdder=null; render(); return; }
   const sb=e.target.closest("[data-sort]"); if(sb){ const m=sb.getAttribute("data-sort");
     if(sortMode===m){ sortDir=sortDir==="desc"?"asc":"desc"; } else { sortMode=m; sortDir="desc"; }
     renderHome(); return; }
+  const adb=e.target.closest("[data-addedby]"); if(adb){ const v=adb.getAttribute("data-addedby"); addedByFilter=(v==="__all")?null:v; renderHome(); return; }
   const gen=e.target.closest("[data-genre]"); if(gen){ const v=gen.getAttribute("data-genre");
     if(v==="__all"){ activeGenres.clear(); excludeGenres.clear(); }
     else if(activeGenres.has(v)){ activeGenres.delete(v); excludeGenres.add(v); }      // include -> exclude
@@ -758,18 +831,25 @@ function openListSheet(id){
 }
 
 let pickGenres=new Set();
+let addStatus=null;   // optionally drop the new song straight onto one of my lists
 function openAddSheet(){
-  pickGenres=new Set();
+  pickGenres=new Set(); addStatus=null;
   const chips=allGenres().map(g=>`<button class="chip" style="--gc:${gcolor(g)}" data-pick="${esc(g)}"><span class="dot"></span>${esc(g)}</button>`).join("");
   openSheet(`<h2>Add a song</h2><p class="sh-sub">It joins the shared songbook for everyone</p>
     <div class="field"><label>Song title</label><input class="txt" id="f-title" placeholder="e.g. Wagon Wheel" autocomplete="off"></div>
     <div class="field"><label>Artist</label><input class="txt" id="f-artist" placeholder="e.g. Darius Rucker" autocomplete="off"></div>
     <div class="field"><label>Genres (tap any that fit)</label><div class="gpick" id="gpick">${chips}</div>
       <div class="newg"><input class="txt" id="f-newg" placeholder="Add a new genre&hellip;" autocomplete="off"><button id="addg">Add</button></div></div>
+    <div class="field"><label>Add to my list (optional)</label><div class="mystatus" id="addlists">
+      <button class="sbtn todo" data-addstatus="todo">To-Do</button>
+      <button class="sbtn learning" data-addstatus="learning">Currently Learning</button>
+      <button class="sbtn known" data-addstatus="known">Currently Know</button></div></div>
     <button class="save" id="savesong" disabled>Add to songbook</button>`);
   const valid=()=>{ $("savesong").disabled=!$("f-title").value.trim()||pickGenres.size===0; };
   const repaint=()=>sheet.querySelectorAll("[data-pick]").forEach(b=>b.classList.toggle("on",pickGenres.has(b.getAttribute("data-pick"))));
   sheet.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ const g=b.getAttribute("data-pick"); pickGenres.has(g)?pickGenres.delete(g):pickGenres.add(g); repaint(); valid(); });
+  sheet.querySelectorAll("[data-addstatus]").forEach(b=>b.onclick=()=>{ const v=b.getAttribute("data-addstatus"); addStatus=(addStatus===v)?null:v;
+    sheet.querySelectorAll("[data-addstatus]").forEach(x=>x.classList.toggle("on",x.getAttribute("data-addstatus")===addStatus)); });
   $("f-title").addEventListener("input",valid);
   $("addg").onclick=()=>{ const v=$("f-newg").value.trim(); if(!v)return; const g=v.replace(/\s+/g," "); pickGenres.add(g);
     const c=document.createElement("button"); c.className="chip on"; c.style.setProperty("--gc",gcolor(g)); c.setAttribute("data-pick",g); c.innerHTML=`<span class="dot"></span>${esc(g)}`;
@@ -778,12 +858,12 @@ function openAddSheet(){
   $("savesong").onclick=()=>{ const t=$("f-title").value.trim(), a=$("f-artist").value.trim()||"Unknown"; if(!t||!pickGenres.size)return;
     const norm=x=>x.toLowerCase().replace(/[^a-z0-9]/g,"");
     const dupes=songs.filter(s=>norm(s.title)===norm(t));
-    if(dupes.length){ confirmDuplicate(t,a,[...pickGenres],dupes); return; }
-    commitAdd(t,a,[...pickGenres]);
+    if(dupes.length){ confirmDuplicate(t,a,[...pickGenres],dupes,addStatus); return; }
+    commitAdd(t,a,[...pickGenres],addStatus);
   };
 }
-async function commitAdd(t,a,genres){ await addSong(t,a,genres); closeSheet(); go("/"); }
-function confirmDuplicate(t,a,genres,dupes){
+async function commitAdd(t,a,genres,status){ const id=await addSong(t,a,genres); if(status&&id) await setStatus(id,status); closeSheet(); go("/"); }
+function confirmDuplicate(t,a,genres,dupes,status){
   const list=dupes.map(s=>{
     const sd=allLists[s.id]||{known:[],todo:[],learning:[],diffs:[]};
     const who=(s.addedBy&&s.addedBy!=="seed")?`Added by ${esc(nameOf(s.addedBy,s.addedByName))}`:"From the original songbook";
@@ -798,7 +878,7 @@ function confirmDuplicate(t,a,genres,dupes){
     <button class="save" id="dup-cancel" style="background:var(--card-hi);color:var(--cream);border:1px solid var(--line)">It's already there &mdash; cancel</button>
     <button class="ghostbtn" id="dup-add">No, add mine anyway</button>`);
   $("dup-cancel").onclick=closeSheet;
-  $("dup-add").onclick=()=>{ commitAdd(t,a,genres); };
+  $("dup-add").onclick=()=>{ commitAdd(t,a,genres,status); };
 }
 
 function openEditSong(id){
