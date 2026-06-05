@@ -540,7 +540,7 @@ async function renderUser(uid){
   const inner=`
     <div style="display:flex;align-items:center;gap:14px;margin:16px 2px 6px">${avatar(pname,pcolor,56)}
       <div><div class="ptitle" style="margin:0;font-size:26px">${esc(pname)}${isMe?" (you)":""}</div>
-      <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${learning.length} learning &middot; ${todo.length} to learn${isMe?` &middot; <button class="edit-pencil" id="editname" style="font-size:13px">Edit name</button> &middot; <button class="edit-pencil" id="codebtn" style="font-size:13px">Recovery code</button> &middot; <button class="edit-pencil" id="adminbtn" style="font-size:13px">Admin${isAdmin?" \u2713":""}</button>`:""}</div></div></div>
+      <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${learning.length} learning &middot; ${todo.length} to learn${isMe?` &middot; <button class="edit-pencil" id="editname" style="font-size:13px">Edit name</button> &middot; <button class="edit-pencil" id="codebtn" style="font-size:13px">Recovery code</button> &middot; <button class="edit-pencil" id="adminbtn" style="font-size:13px">Admin${isAdmin?" \u2713":""}</button> &middot; <button class="edit-pencil" id="signoutbtn" style="font-size:13px">Sign out</button>`:""}</div></div></div>
     ${(!isMe&&isAdmin)?`<div style="display:flex;gap:8px;margin:0 2px 4px"><button class="minibtn" data-arename="${uid}">Rename</button><button class="minibtn danger" data-aremove="${uid}">Remove person</button></div>`:""}
     ${isMe?"":`<button class="back" data-go="/people" style="padding-top:4px">&larr; All people</button>`}
     ${ugChips}
@@ -551,6 +551,7 @@ async function renderUser(uid){
   const en=$("editname"); if(en) en.onclick=openEditName;
   const cb=$("codebtn"); if(cb) cb.onclick=openCodeSheet;
   const ab=$("adminbtn"); if(ab) ab.onclick=openAdminSheet;
+  const so=$("signoutbtn"); if(so) so.onclick=openSignOutSheet;
 }
 
 function renderPeople(){
@@ -837,6 +838,28 @@ function openCodeSheet(){
     <button class="ghostbtn" id="closecode">Done</button>`);
   $("copycode").onclick=async()=>{ try{ await navigator.clipboard.writeText(me.uid); $("copycode").textContent="Copied \u2713"; }catch(e){ $("copycode").textContent="Select &amp; copy above"; } };
   $("closecode").onclick=closeSheet;
+}
+function openSignOutSheet(){
+  openSheet(`<h2>Sign out?</h2><p class="sh-sub">There are no passwords here &mdash; your recovery code <b>is</b> your account. Save it before you sign out, or you won&rsquo;t be able to get your lists and notes back on this device.</p>
+    <div class="codebox" id="so-code">${esc(me.uid)}</div>
+    <button class="save" id="so-copy">Copy my recovery code</button>
+    <button class="ghostbtn danger" id="so-go">Sign out on this device</button>
+    <button class="ghostbtn" id="so-cancel">Cancel</button>`);
+  $("so-copy").onclick=async()=>{ try{ await navigator.clipboard.writeText(me.uid); $("so-copy").textContent="Copied \u2713"; }catch(e){ $("so-copy").textContent="Select the code above to copy"; } };
+  $("so-cancel").onclick=closeSheet;
+  $("so-go").onclick=()=>{ const b=$("so-go");
+    if(b.dataset.confirm){ signOut(); }
+    else{ b.dataset.confirm="1"; b.textContent="Tap again to sign out"; setTimeout(()=>{const x=$("so-go");if(x){delete x.dataset.confirm;x.textContent="Sign out on this device";}},3000); }
+  };
+}
+// Wipe the local profile and hard-reload. The reload is deliberate: the Firestore
+// listeners are keyed to me.uid and guarded by the `started` flag, so a soft sign-out
+// + new sign-in would leave stale listeners on the old profile. A full reload resets
+// all module state; boot() then sees no profile and shows the gate. The cached shell
+// makes this work offline too.
+function signOut(){
+  try{ localStorage.removeItem("cf-uid"); localStorage.removeItem("cf-name"); localStorage.removeItem("cf-color"); localStorage.removeItem("cf-admin"); }catch(e){}
+  location.reload();
 }
 function adminRenameSheet(uid){ nameSheet(uid); }
 function adminRemoveSheet(uid){

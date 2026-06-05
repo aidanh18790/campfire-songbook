@@ -1,7 +1,7 @@
 # Campfire Songbook — Developer Notes
 
 A plain-English map of how the app works, so future-you (or a future Claude session)
-can pick it back up quickly. Last updated at cache version **campfire-v22**.
+can pick it back up quickly. Last updated at cache version **campfire-v23**.
 
 ---
 
@@ -257,3 +257,17 @@ songIds) tracks whether the Other box is open even before any text is saved, and
 background re-renders; clearing a difficulty rating also clears it. Lives on both the song
 page and the spin pick card.
 
+
+## 15. Sign out (added in campfire-v23)
+
+There's now a **Sign out** link on the You page, alongside Edit name / Recovery code /
+Admin. It opens a sheet (`openSignOutSheet()`) that shows the recovery code FIRST —
+because the code IS the account (see Identity, section 5) — lets you copy it, then signs
+out behind a two-tap confirm (same pattern as deleting a song).
+
+`signOut()` clears the localStorage keys (`cf-uid`, `cf-name`, `cf-color`, `cf-admin`)
+and calls `location.reload()`. The reload is deliberate: the Firestore listeners are
+keyed to `me.uid` and guarded by the `started` flag, so a soft sign-out + new sign-in
+would leave stale listeners pointing at the old profile. A full reload resets all module
+state, and `boot()` then sees no profile and shows the name gate. The cached app shell
+makes the reload work offline too.
