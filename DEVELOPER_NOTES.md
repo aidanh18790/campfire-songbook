@@ -1,7 +1,7 @@
 # Campfire Songbook — Developer Notes
 
 A plain-English map of how the app works, so future-you (or a future Claude session)
-can pick it back up quickly. Last updated at cache version **campfire-v23**.
+can pick it back up quickly. Last updated at cache version **campfire-v24**.
 
 ---
 
@@ -271,3 +271,18 @@ keyed to `me.uid` and guarded by the `started` flag, so a soft sign-out + new si
 would leave stale listeners pointing at the old profile. A full reload resets all module
 state, and `boot()` then sees no profile and shows the name gate. The cached app shell
 makes the reload work offline too.
+
+## 16. Scroll preservation on song & spin pages (campfire-v24)
+
+Rating a song, picking an arrangement, or any action that writes to Firestore triggers
+a full re-render (`root.innerHTML` replace). Previously the song and spin pages jumped
+back to the top on every such re-render — `renderHome` already preserved scroll but
+`renderSong`/`renderSpin` did not. Both now capture `.wrap` scrollTop before the re-render
+and restore it after. On the song page it's restored only when `lastSong===id` (i.e. a
+re-render of the same song, not a fresh navigation, which should start at top). On the
+spin page it's restored only inside the `lastSpinPick` reveal-restore block, so fresh
+entries to the tab still start at top.
+
+Also: the arrangement each person picked ("Plays it · Fingerstyle", etc.) is shown to
+everyone under their name in the "How others rated it" block on the song page — it's the
+same `diffNote` field, prefixed with a muted "Plays it ·" label for clarity.

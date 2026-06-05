@@ -463,7 +463,7 @@ function renderSong(id){
       <div class="diffavg">${(()=>{const ad=avgDiff(id);return ad?`Group average <b>${ad.value.toFixed(1)}</b> / 5 &middot; ${ad.count} rating${ad.count!==1?"s":""}`:`No ratings yet &mdash; you&rsquo;re the first`;})()}</div>
       ${(()=>{const by=((allLists[id]&&allLists[id].diffBy)||[]).filter(d=>d.uid!==me.uid).sort((a,b)=>(b.note?1:0)-(a.note?1:0)||b.difficulty-a.difficulty);
         if(!by.length) return "";
-        return `<div class="diffothers"><div class="diffothers-h">How others rated it</div>${by.map(d=>`<div class="noteitem"><div class="notewho" data-go="/user/${d.uid}">${avatar(nameOf(d.uid),colorOf(d.uid),22)}<span class="nm">${esc(nameOf(d.uid))}</span>${diffChip(d.difficulty)}<span class="dval">${d.difficulty.toFixed(1)}</span></div>${d.note?`<div class="notetext">${linkify(d.note)}</div>`:""}</div>`).join("")}</div>`;})()}</div>
+        return `<div class="diffothers"><div class="diffothers-h">How others rated it</div>${by.map(d=>`<div class="noteitem"><div class="notewho" data-go="/user/${d.uid}">${avatar(nameOf(d.uid),colorOf(d.uid),22)}<span class="nm">${esc(nameOf(d.uid))}</span>${diffChip(d.difficulty)}<span class="dval">${d.difficulty.toFixed(1)}</span></div>${d.note?`<div class="notetext"><span style="color:var(--faint)">Plays it &middot; </span>${linkify(d.note)}</div>`:""}</div>`).join("")}</div>`;})()}</div>
     ${supplyDemandSection(id)}
     <div class="section"><h3>My notes <button class="expandtog" data-expand="mynotes">Expand</button></h3>
       <textarea class="notes" id="mynotes" placeholder="Your own notes (everyone can see these too).">${esc(myNoteText)}</textarea>
@@ -473,9 +473,11 @@ function renderSong(id){
   const _cap={mine:(()=>{const el=$("mynotes");return el?el.value:null;})(),
     mineEx:(()=>{const el=$("mynotes");return el?el.classList.contains("expanded"):false;})(),
     diff:(()=>{const el=$("diffnote");return el?el.value:null;})(),
+    wrapScroll:(()=>{const w=document.querySelector(".wrap");return w?w.scrollTop:0;})(),
     focus:document.activeElement&&document.activeElement.id,sel:(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null};
   root.innerHTML=chrome(inner,"home");
   if(lastSong===id){
+    {const w=document.querySelector(".wrap");if(w)w.scrollTop=_cap.wrapScroll;}   // don't jump to top on a re-render (rating, arrangement, etc.)
     if(_cap.mine!=null){const el=$("mynotes");if(el){el.value=_cap.mine;const sm=$("savemine");if(sm)sm.disabled=(el.value.trim()===myNoteText.trim());}}
     if(_cap.mineEx){const el=$("mynotes");if(el){el.classList.add("expanded");const t=document.querySelector('[data-expand="mynotes"]');if(t)t.textContent="Collapse";}}
     if(_cap.diff!=null){const el=$("diffnote");if(el){el.value=_cap.diff;const sd=$("savediff");if(sd)sd.disabled=(el.value.trim()===e.diffNote.trim());}}
@@ -586,6 +588,7 @@ function renderSpin(){
          <div class="slot"><div class="slot-window"><div class="slot-reel" id="reel"></div></div></div>
          <button class="spinbtn" id="spinbtn"${pool.length===0?" disabled":""}>${pool.length===0?"All played \u2014 reset to spin":"Spin the wheel"}</button>
          <div class="spin-pick" id="pick"></div>`}`;
+  const _spinScroll=(()=>{const w=document.querySelector(".wrap");return w?w.scrollTop:0;})();
   root.innerHTML=chrome(inner,"spin");
   if(known.length===0) return;
   const reel=$("reel"), btn=$("spinbtn"), pick=$("pick");
@@ -620,6 +623,7 @@ function renderSpin(){
     pick.innerHTML=pickCard(songsMap[lastSpinPick]); reel.innerHTML=cell(songsMap[lastSpinPick]); wirePickNote(lastSpinPick);
     if(_noteCap.v!=null){ const el=$("spindiffnote"); if(el){ el.value=_noteCap.v; const sv=$("spinsavediff"); if(sv) sv.disabled=(el.value.trim()===myEntry(lastSpinPick).diffNote.trim());
       if(_noteCap.foc){ el.focus(); if(_noteCap.sel!=null){ try{el.setSelectionRange(_noteCap.sel,_noteCap.sel);}catch(e){} } } } }
+    {const w=document.querySelector(".wrap");if(w)w.scrollTop=_spinScroll;}   // keep position on re-render (e.g. rating from the pick card)
   }
   $("norep").onclick=()=>{ noRepeats=!noRepeats; renderSpin(); };
   const rs=$("resetspin"); if(rs) rs.onclick=()=>{ spinPlayed.clear(); lastSpinPick=null; renderSpin(); };
