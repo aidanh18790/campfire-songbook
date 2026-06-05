@@ -3,7 +3,7 @@
     --cream:#f6ecdb; --muted:#b6a48d; --faint:#7c6e5c;
     --card:rgba(255,240,220,0.045); --card-hi:rgba(255,240,220,0.08);
     --line:rgba(246,236,219,0.10); --line-hi:rgba(246,236,219,0.22);
-    --todo:#e8b35a; --known:#8fc06a;
+    --todo:#e8b35a; --known:#8fc06a; --learning:#6cc0d8;
     --g-folk:#9aab5e; --g-country:#e0a23e; --g-pop:#e57b9c;
     --g-rock:#dd6048; --g-bluegrass:#56a290; --g-grunge:#8a8ea6;
     --g-blues:#5c84b1; --g-granola:#c8a86a; --g-other:#f0913f;
@@ -78,13 +78,19 @@
   .pill{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:6px;}
   .pill.todo{color:#241a06;background:var(--todo);}
   .pill.known{color:#14210b;background:var(--known);}
+  .pill.learning{color:#062730;background:var(--learning);}
   .tag{font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 8px;border-radius:6px;color:var(--tc,var(--g-other));background:color-mix(in srgb,var(--tc,var(--g-other)) 15%,transparent);border:1px solid color-mix(in srgb,var(--tc,var(--g-other)) 30%,transparent);}
   .star{flex:0 0 auto;width:32px;height:32px;border-radius:50%;border:none;background:transparent;cursor:pointer;display:grid;place-items:center;color:var(--faint);transition:color .2s,transform .2s;}
   .star:active{transform:scale(.85);} .star.on{color:var(--amber);}
-  .counter{display:flex;gap:10px;align-items:center;margin-top:4px;font-size:12px;font-weight:600;}
+  .counter{display:flex;gap:10px;align-items:center;margin-top:4px;font-size:12px;font-weight:600;flex-wrap:wrap;}
   .counter .cknown{color:var(--known);display:inline-flex;align-items:center;gap:4px;}
   .counter .ctodo{color:var(--todo);display:inline-flex;align-items:center;gap:4px;}
+  .counter .clearning{color:var(--learning);display:inline-flex;align-items:center;gap:4px;}
   .counter .cnone{color:var(--faint);font-weight:500;}
+  /* difficulty: a 1-5 meter (bars that fill easy->hard). Deliberately not stars. */
+  .cdiff{display:inline-flex;align-items:flex-end;gap:2.5px;}
+  .cdiff .db{width:4.5px;height:11px;border-radius:1.5px;background:var(--line-hi);display:inline-block;}
+  .cdiff .db.on{background:var(--amber);}
   .chip.exc{background:transparent;border-color:rgba(221,96,72,.5);color:#e08a78;text-decoration:line-through;}
   .chip.exc .dot{background:#dd6048;}
 
@@ -135,6 +141,14 @@
   .sbtn:active{transform:scale(.96);}
   .sbtn.todo.on{background:var(--todo);color:#241a06;border-color:transparent;}
   .sbtn.known.on{background:var(--known);color:#14210b;border-color:transparent;}
+  .sbtn.learning.on{background:var(--learning);color:#062730;border-color:transparent;}
+  /* interactive difficulty rater (song page + roulette) */
+  .diffrater{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .dsegs{display:inline-flex;gap:6px;}
+  .dseg{width:34px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--card-hi);cursor:pointer;padding:0;transition:transform .12s,background .15s,border-color .15s;}
+  .dseg:active{transform:scale(.9);}
+  .dlabel{color:var(--muted);font-size:13.5px;font-weight:600;}
+  .diffavg{color:var(--faint);font-size:13px;margin-top:12px;} .diffavg b{color:var(--cream);}
   textarea.notes{width:100%;font-family:inherit;font-size:15px;line-height:1.5;color:var(--cream);background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:12px;padding:13px;outline:none;resize:none;height:96px;overflow-y:auto;transition:border-color .2s,height .2s;}
   textarea.notes.expanded{height:auto;min-height:300px;overflow-y:hidden;}
   .expandtog{float:right;background:none;border:none;color:var(--ember-soft);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:2px 0;}
@@ -147,7 +161,7 @@
   .sdgroup{margin-bottom:14px;} .sdgroup:last-child{margin-bottom:0;}
   .sdhead{margin-bottom:8px;}
   .sdlabel{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;letter-spacing:.02em;}
-  .sdlabel.known{color:var(--known);} .sdlabel.todo{color:var(--todo);}
+  .sdlabel.known{color:var(--known);} .sdlabel.todo{color:var(--todo);} .sdlabel.learning{color:var(--learning);}
   .pchips{display:flex;flex-wrap:wrap;gap:7px;}
   .pchip{display:inline-flex;align-items:center;gap:6px;background:var(--card-hi);border:1px solid var(--line);border-radius:999px;padding:4px 11px 4px 4px;font-size:13px;font-weight:600;color:var(--cream);cursor:pointer;transition:transform .12s;}
   .pchip:active{transform:scale(.95);}
@@ -181,6 +195,7 @@
   .listsec .lh .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
   .listsec.todo .lh .dot{background:var(--todo);}
   .listsec.known .lh .dot{background:var(--known);}
+  .listsec.learning .lh .dot{background:var(--learning);}
   .listsec .lh h2{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin:0;letter-spacing:-.01em;color:var(--cream);}
   .listsec .lh .ct{color:var(--faint);font-size:13px;font-weight:600;}
   .listsec .lh .chev{margin-left:auto;color:var(--faint);font-size:20px;line-height:1;width:20px;text-align:center;}
@@ -218,6 +233,16 @@
   .pick-title{font-family:'Fraunces',serif;font-weight:700;font-size:26px;line-height:1.1;margin-top:6px;letter-spacing:-.02em;}
   .pick-artist{color:var(--muted);font-size:15px;margin-top:4px;}
   .pick-tap{color:var(--ember-soft);font-size:13px;font-weight:600;margin-top:12px;}
+  .pick-card{cursor:default;}
+  .pick-diff{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .pick-diff-l{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
+  .pick-diff .diffrater{justify-content:center;}
+
+  .toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+    background:rgba(40,28,18,.97);color:var(--cream);border:1px solid var(--line-hi);border-radius:12px;padding:12px 18px;
+    font-size:14px;font-weight:600;max-width:88%;text-align:center;box-shadow:0 8px 26px rgba(0,0,0,.5);z-index:90;
+    opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
   .scrim{position:fixed;inset:0;z-index:60;background:rgba(8,5,3,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .28s;}
   .scrim.open{opacity:1;pointer-events:auto;}
@@ -232,6 +257,8 @@
   .opt:active{transform:scale(.98);}
   .opt .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:0 0 auto;}
   .opt.todo .ic{background:var(--todo);color:#241a06;} .opt.known .ic{background:var(--known);color:#14210b;}
+  .opt.learning .ic{background:var(--learning);color:#062730;}
+  .optsub{margin-left:auto;font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--faint);}
   .opt.remove{color:#e89;} .opt.remove .ic{background:rgba(220,96,72,.2);color:#e89;}
   .opt.on{border-color:var(--amber);}
   label{display:block;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;}
@@ -244,13 +271,3 @@
   .newg button{font-weight:600;font-size:14px;color:var(--cream);background:var(--card-hi);border:1px solid var(--line);border-radius:11px;padding:0 16px;cursor:pointer;}
   .save{width:100%;font-weight:700;font-size:17px;color:#241006;background:linear-gradient(180deg,var(--amber) 0%,#d99b3c 100%);border:none;border-radius:14px;padding:16px;cursor:pointer;margin-top:6px;transition:transform .12s,opacity .2s;}
   .save:active{transform:scale(.985);} .save:disabled{opacity:.4;}
-
-  /* Landscape lock — keep the app upright on phones */
-  .rotate-lock{display:none;}
-  @media screen and (orientation:landscape) and (max-height:550px){
-    .rotate-lock{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;
-      text-align:center;padding:24px;background:linear-gradient(180deg,#120c07 0%,var(--bg) 60%,var(--bg2) 100%);}
-    .rotate-lock .flame{width:46px;height:58px;margin-bottom:16px;animation:flicker 5.5s ease-in-out infinite;}
-    .rotate-lock .rl-title{font-family:'Fraunces',serif;font-weight:800;font-size:24px;letter-spacing:-.02em;color:var(--cream);}
-    .rotate-lock .rl-sub{color:var(--muted);font-size:14px;margin-top:8px;}
-  }

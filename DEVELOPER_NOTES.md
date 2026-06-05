@@ -1,0 +1,274 @@
+# Campfire Songbook — Developer Notes
+
+A plain-English map of how the app works, so future-you (or a future Claude session)
+can pick it back up quickly. Last updated at cache version **campfire-v18**.
+
+---
+
+## 1. What it is
+
+A mobile-first web app (PWA) for a group of friends to track guitar songs that are
+good for campfires. Anyone can browse/add songs to a shared list, keep their own
+"Currently Know" and "To-Do" lists, leave notes, see what everyone else knows, and
+spin a slot machine to pick what to play.
+
+- **Live site:** https://aidanh18790.github.io/campfire-songbook
+- **Repo:** https://github.com/aidanh18790/campfire-songbook
+- **Hosting:** GitHub Pages (static files, served from the repo root)
+- **Backend:** Firebase Firestore (project `campfire-ed6f3`), no server code
+
+There is no build step and no framework. It's plain HTML/CSS/JavaScript in one file
+plus a service worker. You edit the files and re-upload them to the repo.
+
+---
+
+## 2. The files (all live in the repo root)
+
+| File | What it is |
+|------|-----------|
+| `index.html` | The entire app — HTML, CSS, and JS all in one file. This is 95% of everything. |
+| `sw.js` | Service worker. Caches the app so it opens offline; must bypass Firebase/Google domains. |
+| `manifest.webmanifest` | Tells phones it's an installable app (name, colors, icons). |
+| `icon-192.png`, `icon-512.png` | App icons (the flame). |
+| `apple-touch-icon.png` | Home-screen icon for iPhones. |
+
+Only `index.html` and `sw.js` change in normal day-to-day work. The manifest and
+icons are basically set-and-forget.
+
+---
+
+## 3. How updates reach phones (important!)
+
+1. Edit `index.html` (and/or `sw.js`).
+2. **Bump the cache version** in `sw.js` — the line `const CACHE = "campfire-vN";`.
+   Increment N every time you change `index.html`, or phones keep serving the old
+   cached copy. This is the #1 thing to not forget.
+3. Upload the changed file(s) to the GitHub repo (overwrite — same filenames).
+4. On each phone, opening the app twice picks up the new version (the service worker
+   serves the old copy once, fetches the new one in the background, swaps on next open).
+   A full delete-and-re-add of the home-screen app is the nuclear option if something
+   seems stuck.
+
+---
+
+## 4. The data model (Firestore)
+
+Everything lives in one Firestore database. Collections/documents:
+
+```
+songs/{songId}
+  title, artist, genres[], sortKey (number, used for "date added" order),
+  addedBy (a user's id, or "seed"), addedByName,
+  communalNotes (shared notes text), communalBy, communalAt
+
+songs/{songId}/notes/{userId}      <- per-person notes on a song
+  text, name, color, uid, updatedAt
+
+users/{userId}                     <- a person's public profile
+  name, color, updatedAt
+
+users/{userId}/lists/{songId}      <- which of a person's lists a song is in
+  status: "known" | "todo" | "learning" | null
+  starred: true/false
+  difficulty: 1..5 | null            <- that person's difficulty rating (NOT stars; stars = favorite)
+  updatedAt
+
+meta/init        <- a guard doc; if it exists, the 49 seed songs are already loaded
+meta/admin       <- { hash } : SHA-256 of the admin passphrase
+```
+
+**Key idea:** a person's identity (`userId`) IS their recovery code. There are no real
+accounts. See Identity below.
+
+**Supply & demand counts** come from reading *every* user's `lists` subcollection at
+once via a Firestore "collection group query" on `lists`. That's how a song row can
+show "Known by 3 / Want to learn 2" and who they are.
+
+---
+
+## 5. Identity & recovery codes (no real login)
+
+We tried Google sign-in and dropped it — installed iPhone PWAs get stuck in an OAuth
+redirect loop. So identity is intentionally simple:
+
+- On first run, the person picks a name + color. We generate a friendly id like
+  `ember-7K3Q` and store it in the browser's `localStorage` (keys `cf-uid`, `cf-name`,
+  `cf-color`). That id is their document id under `users/`.
+- That id doubles as their **recovery code**. If they delete the app or switch phones,
+  they enter the code on the "I have a recovery code" screen and `restoreProfile()`
+  loads `users/{code}` back onto the device.
+- Because there are no passwords, **anyone with a code can load that profile**, and
+  **all lists/notes are publicly visible** — this is by design for a friend group.
+
+(Older profiles created before recovery codes existed keep their original long random
+ids as their codes — still works, just not pretty.)
+
+---
+
+## 6. Admin ("soft" admin)
+
+- Stored as a SHA-256 hash of a passphrase in `meta/admin`. First person to open the
+  Admin panel (You tab → Admin) sets it.
+- Unlocking sets `localStorage cf-admin = "1"` and the in-memory `isAdmin` flag.
+- When admin: the People tab and user pages show **Rename** and **Remove** buttons for
+  anyone (fixes duplicate names, removes people).
+- This is **UI-gated, not enforced** — the Firestore rules are wide open, so a
+  determined person could bypass it via the console. Fine for friends; not real security.
+
+---
+
+## 7. Firestore security rules
+
+Because there are no logged-in users, the rules are fully open:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} { allow read, write: if true; }
+  }
+}
+```
+
+If reads/writes ever start failing with permission errors, check this first — it must
+stay open for the no-login model to work.
+
+---
+
+## 8. How the code in index.html is organized
+
+It's one big `<script type="module">`. Rough top-to-bottom order:
+
+1. **Firebase config + imports** — `initializeApp`, Firestore loaded from the gstatic CDN.
+   Firestore uses `persistentLocalCache` so data works offline and queued writes sync later.
+2. **Helpers** — `esc()` (escape HTML), `linkify()`, `avatar()` (colored initials),
+   `gcolor()` (genre→color), `searchLinks()` (auto Spotify/Apple Music search URLs),
+   `sha256()`.
+3. **`seedRows()`** — the original 49 songs, loaded once on first run.
+4. **State** — module-level variables: `me`, `songs`, `songsMap`, `myLists`, `usersMap`,
+   `allLists` (everyone's lists for counts), plus UI state like `query`, `activeGenres`,
+   `excludeGenres`, `sortMode`/`sortDir`, `collapsed`, `userGenres`, `noRepeats`/`spinPlayed`.
+5. **Identity functions** — `localId`, `loadProfile`, `saveProfile`, `restoreProfile`,
+   recovery code generation.
+6. **Admin functions** — `sha256`, `getAdminHash`, `adminRename`, `adminRemove`, etc.
+7. **Data ops** — `addSong`, `deleteSong`, `saveSongFields`, `saveCommunal`,
+   `savePersonalNote`, `setStatus`, `toggleStar`. These write to Firestore.
+8. **Listeners** — `startListeners()` sets up real-time `onSnapshot` listeners on
+   songs, the current user's lists, all users, and the collection-group lists.
+   When data changes, it re-renders.
+9. **Router** — hash-based. `route()` reads `location.hash`. Views: `home`, `song/{id}`,
+   `people`, `spin`, `me`, `user/{uid}`.
+10. **Render functions** — `chrome()` draws the top bar + bottom nav around a view's
+    inner HTML. Then `renderHome`, `renderSong`, `renderUser`, `renderPeople`,
+    `renderSpin`, plus `songRow`/`listItem` row builders.
+11. **Global click handler** — one big `document.addEventListener("click", ...)` that
+    reads `data-*` attributes (`data-go`, `data-open`, `data-plus`, `data-star`,
+    `data-set`, `data-genre`, `data-ugenre`, `data-sort`, `data-collapse`,
+    `data-expand`, `data-arename`, `data-aremove`). This is how almost all interaction
+    is wired — add a button with a `data-` attribute, handle it here.
+12. **Sheets** — bottom-sheet popups: `openListSheet` (+button), `openAddSheet`,
+    `openEditSong`, `nameSheet`, `openCodeSheet`, `openAdminSheet`, `confirmDuplicate`.
+13. **Gate** — `renderGate` (pick a name), `renderRestore` (enter recovery code),
+    `showNewCode` (shows the code after first sign-up).
+14. **Boot** — registers the service worker, requests persistent storage, loads the
+    profile, then either shows the gate or starts listeners and renders.
+    **Offline-boot gotcha (already fixed in v15):** boot must call `startListeners()`
+    and `render()` FIRST, then fire `ensureProfile()`/`ensureSeed()` in the background
+    (not `await` them). Offline, those Firestore writes hang forever instead of failing,
+    so awaiting them before `render()` leaves the app stuck on "Gathering round the
+    fire…". The same non-blocking pattern is used in the sign-up and restore flows.
+
+---
+
+## 9. Rendering model (how the screen updates)
+
+- The whole app is re-rendered by replacing `root.innerHTML`. There's no virtual DOM.
+- A re-render happens whenever a Firestore listener fires or the user does something.
+- **Gotcha that's already handled:** on the song page, re-rendering would wipe text
+  you're typing or reset scroll. The code captures textarea values, focus, cursor
+  position, expand state, and horizontal scroll of the genre chips before re-rendering
+  and restores them after. If you add new inputs to a frequently-re-rendered page,
+  remember they can be clobbered by a background update.
+- The song-page notes listener is attached **once per song** (tracked by `notesSongId`)
+  to avoid an infinite re-render loop. Don't reattach it inside the render path.
+
+---
+
+## 10. Layout (why the bars stay put)
+
+iOS standalone PWAs mishandle `position:fixed`, so the layout is a locked flex column:
+
+- `body` is `position:fixed; inset:0` (can't scroll the page itself).
+- `#root` is a flex column at `100dvh`.
+- The top bar and bottom nav are non-scrolling flex children (always visible).
+- Only `.wrap` (the middle) scrolls.
+
+If you ever see bars drifting again, this is the part to look at.
+
+---
+
+## 11. Common tasks (how to...)
+
+- **Change a color / spacing:** edit the CSS in the `<style>` block at the top of
+  `index.html`. Colors are CSS variables in `:root` (e.g. `--ember`, `--known`, `--todo`).
+- **Add a new page/tab:** add a route in `route()`, a `renderX()` function, a dispatch
+  line in `render()`, and a nav button in `chrome()`.
+- **Add a button action:** give the element a `data-something="value"` attribute and
+  handle it in the global click handler.
+- **Add a genre color:** add it to `GENRE_COLORS` and a matching `--g-...` CSS variable.
+- **Change the seed songs:** edit `seedRows()`. Note: seeding only happens once ever
+  (guarded by `meta/init`). To re-seed a fresh database, delete the `meta/init` doc in
+  the Firebase console.
+
+---
+
+## 12. Known limitations / things to watch
+
+- **No real auth** — identity is per-device, recoverable only via the code; anyone with
+  a code can load that profile. Admin is soft.
+- **localStorage can be cleared** — iOS Safari may evict it after ~7 days of non-use for
+  non-installed sites; installing to the home screen + the persistent-storage request
+  reduce this. Recovery codes are the safety net.
+- **Bump the cache version** on every `index.html` change or updates won't show.
+- **Supply/demand uses a collection-group query** — if counts ever come back empty with
+  a console error containing a link, click the link to create the Firestore index.
+- **Spin "no repeats" set is per-session** — it resets when the app fully closes.
+
+---
+
+## 14. v18 additions (learning list, difficulty, etc.)
+
+- **"Currently Learning" list** — a third personal status alongside known/todo, capped at
+  `LEARNING_LIMIT` (3) songs. Enforced in `setStatus()` (returns `false` and shows a
+  `toast()` if full). Rolled up for everyone in the collection-group listener
+  (`allLists[id].learning`). Renders as the **top** section on personal pages.
+- **Difficulty rating (1–5)** — stored per person on their own list entry as
+  `difficulty` (so it lives next to status/starred; no new collection or index). It is
+  deliberately a bar meter, *not* stars, because stars already mean "favorite/quality."
+  - Write path: `setDifficulty()` → `writeEntry()`. `writeEntry()` is the single place
+    that saves/deletes a list doc: the doc survives if it has a status, a star, OR a
+    difficulty, otherwise it's deleted. `setStatus`/`toggleStar` route through it too so
+    they never clobber a rating.
+  - Rate it on the **song page** and on the **roulette pick card**. Home rows show the
+    **group average** (`avgDiff()` over `allLists[id].diffs`); personal-page rows show
+    **that person's** rating.
+  - Sort-by-difficulty on home (`sortMode==="difficulty"`); unrated songs always sink
+    to the bottom regardless of direction.
+- **Roulette reveal survival** — rating a song from the spin page writes to Firestore,
+  which triggers a re-render. `lastSpinPick` holds the landed song id so `renderSpin()`
+  restores the reveal instead of wiping it. It's cleared when leaving the spin route.
+- **New-genre colors** — `gcolor()` hashes unknown genre names to `GENRE_EXTRA_PAL` so a
+  user-added genre gets its own stable color instead of always being orange.
+- **Swipe-to-dismiss sheets** — `enableSheetSwipe()` adds a drag-down gesture on `#sheet`
+  (only when scrolled to top, so it doesn't fight scrolling). Past ~90px it closes.
+
+---
+
+## 13. Quick glossary of the main state variables
+
+- `me` — `{uid, name, color}` for the current device's profile.
+- `songs` / `songsMap` — the shared songbook (array and id→song lookup).
+- `myLists` — current user's `{songId: {status, starred}}`.
+- `allLists` — everyone's lists rolled up to `{songId: {known:[uids], todo:[uids]}}`.
+- `usersMap` — `{uid: {name, color}}` for everyone (People tab, names on notes).
+- `isAdmin` — whether admin tools are unlocked on this device.

@@ -24,11 +24,40 @@ const root = $("root");
 const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function linkify(t){ return esc(t).replace(/(https?:\/\/[^\s]+)/g, u=>`<a href="${u}" target="_blank" rel="noopener">${u}</a>`); }
 const GENRE_COLORS={Folk:"--g-folk",Country:"--g-country",Pop:"--g-pop",Rock:"--g-rock",Bluegrass:"--g-bluegrass",Grunge:"--g-grunge",Blues:"--g-blues",Granola:"--g-granola"};
-const gcolor=n=>GENRE_COLORS[n]?`var(${GENRE_COLORS[n]})`:"var(--g-other)";
+// Palette for user-created genres so each one gets its own stable color instead of all-orange.
+const GENRE_EXTRA_PAL=["#c0653f","#7e9b54","#4f8f86","#5c84b1","#9c6ab0","#c25d80","#3f8f6b","#b07cc6","#cf7d52","#5aa0a8","#a8a85a","#6f9f6b"];
+function gcolor(n){
+  if(GENRE_COLORS[n]) return `var(${GENRE_COLORS[n]})`;
+  if(!n) return "var(--g-other)";
+  let h=0; for(const c of String(n)) h=(h*31+c.charCodeAt(0))>>>0;
+  return GENRE_EXTRA_PAL[h%GENRE_EXTRA_PAL.length];
+}
 const FLAME=`<svg class="flame" viewBox="0 0 30 38" fill="none"><path d="M15 1C16 9 23 11 23 21c0 6-3.6 10-8 10s-8-4-8-10c0-4 2-6 3-8 .5 3 2 4 3 4-1-4 1-9 2-16Z" fill="url(#fg)"/><path d="M15 14c1 4 4 5 4 9 0 3-1.8 5-4 5s-4-2-4-5c0-2 1-3 2-4 .3 1.5 1.2 2 2 2-.6-2 0-5 0-7Z" fill="#ffe09a"/><defs><linearGradient id="fg" x1="15" y1="1" x2="15" y2="31" gradientUnits="userSpaceOnUse"><stop stop-color="#ffd24a"/><stop offset="1" stop-color="#ff6a2b"/></linearGradient></defs></svg>`;
 const starSvg = on => `<svg width="20" height="20" viewBox="0 0 20 20" fill="${on?'currentColor':'none'}" stroke="currentColor" stroke-width="1.6"><path d="M10 1.8l2.5 5.1 5.6.8-4 4 .95 5.6L10 14.7 4.9 17.3l1-5.6-4-4 5.6-.8z"/></svg>`;
 const knownIcon=`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 10l4 4 9-10"/></svg>`;
 const todoIcon=`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l3 2"/></svg>`;
+const learningIcon=`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3.5v8"/><circle cx="12.6" cy="12.2" r="2.4"/><path d="M15 3.5l-7 1.8v8.2"/><circle cx="5.6" cy="14.6" r="2.4"/></svg>`;
+
+/* ---------- difficulty (a 1-5 scale, NOT stars: bars that fill easy->hard) ---------- */
+const LEARNING_LIMIT=3;
+const DIFF_LABELS=["Tap to rate","Easy","Easy-ish","Medium","Tough","Very tough"];
+function diffColor(level){ return ({1:"#8fc06a",2:"#bcc25a",3:"#e8b35a",4:"#e08a4a",5:"#dd6048"})[Math.round(level)]||"var(--faint)"; }
+// Static little meter used on list rows (read-only display).
+function diffBars(level){
+  const r=Math.max(0,Math.min(5,Math.round(level||0))); const col=diffColor(r); let out="";
+  for(let i=1;i<=5;i++) out+=`<i class="db${i<=r?' on':''}"${i<=r?` style="background:${col}"`:''}></i>`;
+  return out;
+}
+function diffChip(level,title){ if(!level) return ""; return `<span class="cdiff" title="${esc(title||('Difficulty '+(+level).toFixed(1)+'/5'))}">${diffBars(level)}</span>`; }
+// Interactive rater (song page + roulette). Click a segment to set, click the current value to clear.
+function diffRater(songId,current){
+  let segs="";
+  for(let i=1;i<=5;i++){ const on=current&&i<=current;
+    segs+=`<button class="dseg${on?' on':''}" data-diff="${songId}" data-difflevel="${i}"${on?` style="background:${diffColor(current)};border-color:${diffColor(current)}"`:''} aria-label="difficulty ${i} of 5"></button>`; }
+  return `<div class="diffrater"><div class="dsegs">${segs}</div><span class="dlabel">${current?esc(DIFF_LABELS[current]):"Tap to rate"}</span></div>`;
+}
+// Average difficulty across everyone (from the collection-group rollup in allLists).
+function avgDiff(id){ const sd=allLists[id]; if(!sd||!sd.diffs||!sd.diffs.length) return null; const sum=sd.diffs.reduce((a,b)=>a+b,0); return {value:sum/sd.diffs.length,count:sd.diffs.length}; }
 const searchLinks = (title,artist)=>{ const q=encodeURIComponent(`${title} ${artist}`.trim()); return { spotify:`https://open.spotify.com/search/${q}`, apple:`https://music.apple.com/search?term=${q}` }; };
 
 const PAL=["#c0653f","#d99b3c","#7e9b54","#4f8f86","#5c84b1","#9c6ab0","#c25d80","#3f8f6b"];
@@ -75,14 +104,24 @@ function seedRows(){
 let me=null;                 // {uid,name,color}
 let songs=[], songsMap={}, myLists={}, usersMap={}, allLists={};
 let query="", activeGenres=new Set(), excludeGenres=new Set(), online=navigator.onLine, started=false;
-let sortMode="added", sortDir="desc";  // added|known|todo ; desc|asc
-let collapsed={known:false,todo:false};
+let sortMode="added", sortDir="desc";  // added|known|todo|difficulty ; desc|asc
+let collapsed={known:false,todo:false,learning:false};
 let userGenres=new Set();  // genre filter on the personal page
 let noRepeats=false, spinPlayed=new Set();
+let lastSpinPick=null;     // id of the song the wheel last landed on (survives re-renders so rating it doesn't wipe the reveal)
 let lastUserView=null;
 let isAdmin=(()=>{try{return localStorage.getItem("cf-admin")==="1";}catch(e){return false;}})();
 let detachNotes=null, currentNotes=[], notesSongId=null, lastSong=null;
 let myPersonalNotes={};  // songId -> text, populated by the notes listener, survives navigation
+
+/* Lightweight toast (e.g. "Currently Learning is full"). */
+let toastTimer=null;
+function toast(msg){
+  let t=$("toast");
+  if(!t){ t=document.createElement("div"); t.id="toast"; t.className="toast"; document.body.appendChild(t); }
+  t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ const x=$("toast"); if(x) x.classList.remove("show"); },2600);
+}
 
 const CODE_WORDS=["ember","cedar","river","willow","maple","aspen","spruce","birch","pine","fern","moss","creek","ridge","cabin","trail","flint","spark","glow","drift","stone"];
 function newCode(){
@@ -90,7 +129,7 @@ function newCode(){
   const n=Math.random().toString(36).slice(2,6).toUpperCase();
   return w+"-"+n;
 }
-function normalizeCode(s){ return String(s||"").trim().replace(/\s+/g,"").replace(/[^A-Za-z0-9_-]/g,""); }
+function normalizeCode(s){ return String(s||"").trim().toLowerCase().replace(/\s+/g,"").replace(/[^a-z0-9-]/g,""); }
 function localId(){
   let id=null; try{ id=localStorage.getItem("cf-uid"); }catch(e){}
   if(!id){ id=newCode(); try{localStorage.setItem("cf-uid",id);}catch(e){} }
@@ -113,18 +152,12 @@ function saveProfile(name,color){
 async function restoreProfile(code){
   const id=normalizeCode(code);
   if(!id) return null;
-  // Firestore doc ids are case-sensitive. Codes are shown with capital letters, so try
-  // the exact text first, then a lowercase fallback for older all-lowercase ids.
-  const tries=[id]; const lower=id.toLowerCase(); if(lower!==id) tries.push(lower);
-  let snap=null, foundId=null;
-  for(const t of tries){
-    try{ const s=await F.getDoc(F.doc(db,"users",t)); if(s.exists()){ snap=s; foundId=t; break; } }catch(e){}
-  }
-  if(!snap) return null;
+  let snap; try{ snap=await F.getDoc(F.doc(db,"users",id)); }catch(e){ return null; }
+  if(!snap.exists()) return null;
   const d=snap.data();
-  setLocalId(foundId);
-  try{ localStorage.setItem("cf-name",d.name||"Friend"); localStorage.setItem("cf-color",d.color||colorFor(foundId)); }catch(e){}
-  me={uid:foundId,name:d.name||"Friend",color:d.color||colorFor(foundId)};
+  setLocalId(id);
+  try{ localStorage.setItem("cf-name",d.name||"Friend"); localStorage.setItem("cf-color",d.color||colorFor(id)); }catch(e){}
+  me={uid:id,name:d.name||"Friend",color:d.color||colorFor(id)};
   return me;
 }
 function setAdmin(on){ isAdmin=on; try{ on?localStorage.setItem("cf-admin","1"):localStorage.removeItem("cf-admin"); }catch(e){} }
@@ -167,16 +200,31 @@ async function savePersonalNote(songId,text){
   if(text.trim()) await F.setDoc(ref,{text:text.trim(),name:me.name,color:me.color,uid:me.uid,updatedAt:F.serverTimestamp()});
   else await F.deleteDoc(ref).catch(()=>{});
 }
-function myEntry(id){ return myLists[id]||{status:null,starred:false}; }
+function myEntry(id){ const e=myLists[id]; return {status:(e&&e.status)||null,starred:!!(e&&e.starred),difficulty:(e&&e.difficulty)||null}; }
+function learningCount(){ return Object.values(myLists).filter(v=>v && v.status==='learning').length; }
+// One place that writes (or deletes) the current user's entry for a song. The doc is
+// kept alive if it carries a status, a star, OR a difficulty rating; otherwise removed.
+async function writeEntry(songId,{status,starred,difficulty}){
+  const ref=F.doc(db,"users",me.uid,"lists",songId);
+  if(!status && !starred && !difficulty){ await F.deleteDoc(ref).catch(()=>{}); return; }
+  await F.setDoc(ref,{status:status||null,starred:!!starred,difficulty:difficulty||null,updatedAt:F.serverTimestamp()});
+}
+// Returns false if the change was blocked (Currently Learning full), true otherwise.
 async function setStatus(songId,status){
-  const ref=F.doc(db,"users",me.uid,"lists",songId); const cur=myEntry(songId);
-  if(status===null){ if(cur.starred) await F.setDoc(ref,{status:null,starred:true,updatedAt:F.serverTimestamp()}); else await F.deleteDoc(ref).catch(()=>{}); }
-  else await F.setDoc(ref,{status,starred:cur.starred||false,updatedAt:F.serverTimestamp()},{merge:true});
+  const cur=myEntry(songId);
+  if(status==='learning' && cur.status!=='learning' && learningCount()>=LEARNING_LIMIT){
+    toast(`Currently Learning is full (max ${LEARNING_LIMIT}). Move one out first.`); return false;
+  }
+  await writeEntry(songId,{status,starred:cur.starred,difficulty:cur.difficulty}); return true;
 }
 async function toggleStar(songId){
-  const ref=F.doc(db,"users",me.uid,"lists",songId); const cur=myEntry(songId); const next=!cur.starred;
-  if(!next && !cur.status) await F.deleteDoc(ref).catch(()=>{});
-  else await F.setDoc(ref,{status:cur.status||null,starred:next,updatedAt:F.serverTimestamp()},{merge:true});
+  const cur=myEntry(songId);
+  await writeEntry(songId,{status:cur.status,starred:!cur.starred,difficulty:cur.difficulty});
+}
+async function setDifficulty(songId,level){
+  const cur=myEntry(songId);
+  const next=(cur.difficulty===level)?null:level;   // tapping the current value clears it
+  await writeEntry(songId,{status:cur.status,starred:cur.starred,difficulty:next});
 }
 
 /* ============================================================
@@ -194,9 +242,11 @@ function startListeners(){
     const next={};
     snap.docs.forEach(d=>{
       const uid=d.ref.parent.parent.id, songId=d.id, v=d.data();
-      if(!next[songId]) next[songId]={known:[],todo:[]};
+      if(!next[songId]) next[songId]={known:[],todo:[],learning:[],diffs:[]};
       if(v.status==='known') next[songId].known.push(uid);
       else if(v.status==='todo') next[songId].todo.push(uid);
+      else if(v.status==='learning') next[songId].learning.push(uid);
+      if(typeof v.difficulty==='number' && v.difficulty>=1) next[songId].diffs.push(v.difficulty);
     });
     allLists=next; rerender();
   },err=>console.warn("collectionGroup lists",err));
@@ -240,11 +290,14 @@ function chrome(inner,active){
 
 function songRow(s){
   const e=myEntry(s.id);
-  const pill = e.status==='todo'?`<span class="pill todo">To-Do</span>`:e.status==='known'?`<span class="pill known">Known</span>`:"";
+  const pill = e.status==='todo'?`<span class="pill todo">To-Do</span>`:e.status==='learning'?`<span class="pill learning">Learning</span>`:e.status==='known'?`<span class="pill known">Known</span>`:"";
   const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
   const badges=(pill||tags)?`<div class="badges">${pill}${tags}</div>`:"";
-  const sd=allLists[s.id]||{known:[],todo:[]};
-  const counter=`<div class="counter">${sd.known.length?`<span class="cknown">${knownIcon} ${sd.known.length}</span>`:""}${sd.todo.length?`<span class="ctodo">${todoIcon} ${sd.todo.length}</span>`:""}${(!sd.known.length&&!sd.todo.length)?`<span class="cnone">Not on anyone&rsquo;s list yet</span>`:""}</div>`;
+  const sd=allLists[s.id]||{known:[],todo:[],learning:[],diffs:[]};
+  const ad=avgDiff(s.id);
+  const diffHtml=ad?diffChip(ad.value,`Average difficulty ${ad.value.toFixed(1)}/5 from ${ad.count}`):"";
+  const hasList=sd.known.length||sd.learning.length||sd.todo.length;
+  const counter=`<div class="counter">${sd.known.length?`<span class="cknown">${knownIcon} ${sd.known.length}</span>`:""}${sd.learning.length?`<span class="clearning">${learningIcon} ${sd.learning.length}</span>`:""}${sd.todo.length?`<span class="ctodo">${todoIcon} ${sd.todo.length}</span>`:""}${diffHtml}${(!hasList&&!diffHtml)?`<span class="cnone">Not on anyone&rsquo;s list yet</span>`:""}</div>`;
   const addedBy = (s.addedBy && s.addedBy!=="seed") ? `<div class="rowadded">Added by ${esc(nameOf(s.addedBy,s.addedByName))}</div>` : "";
   return `<div class="row" data-id="${s.id}">
     <button class="plus ${e.status?'has':''}" data-plus="${s.id}" aria-label="add to list">+</button>
@@ -264,9 +317,17 @@ function filteredSongs(){
     const mInc=activeGenres.size===0||g.some(x=>activeGenres.has(x));
     const mExc=excludeGenres.size===0||!g.some(x=>excludeGenres.has(x));
     return mq&&mInc&&mExc; });
-  const cnt=s=>allLists[s.id]||{known:[],todo:[]};
+  const cnt=s=>allLists[s.id]||{known:[],todo:[],learning:[],diffs:[]};
   const metric=s=> sortMode==="known"?cnt(s).known.length : sortMode==="todo"?cnt(s).todo.length : (s.sortKey||0);
-  out.sort((a,b)=>{ const d=metric(a)-metric(b); if(d!==0) return sortDir==="asc"?d:-d;
+  out.sort((a,b)=>{
+    if(sortMode==="difficulty"){
+      const da=avgDiff(a.id), db_=avgDiff(b.id), va=da?da.value:null, vb=db_?db_.value:null;
+      if(va==null&&vb==null) return a.title.localeCompare(b.title);
+      if(va==null) return 1; if(vb==null) return -1;          // unrated songs sink to the bottom either way
+      if(va!==vb) return sortDir==="asc"?va-vb:vb-va;
+      return a.title.localeCompare(b.title);
+    }
+    const d=metric(a)-metric(b); if(d!==0) return sortDir==="asc"?d:-d;
     return a.title.localeCompare(b.title); });   // stable tiebreak by title
   return out;
 }
@@ -284,7 +345,7 @@ function renderHome(){
   } else showing=query?`${rows.length} match${rows.length!==1?"es":""}`:"All songs";
   const active=(activeGenres.size||excludeGenres.size||query);
   const arrow=m=> sortMode!==m?"" : (sortDir==="desc"?" \u2193":" \u2191");
-  const lbl={added:"Date added",known:"Most known",todo:"Most to-do"};
+  const lbl={added:"Date added",known:"Most known",todo:"Most to-do",difficulty:"Difficulty"};
   const sortBtn=m=>`<button class="sortbtn ${sortMode===m?'on':''}" data-sort="${m}">${lbl[m]}${arrow(m)}</button>`;
   const inner=`
     <div class="ptitle">Campfire Songbook</div>
@@ -293,7 +354,7 @@ function renderHome(){
       <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
         <input id="search" type="text" placeholder="Search songs or artists&hellip;" autocomplete="off" value="${esc(query)}"></div>
       <div class="filters" id="filters">${chips}</div>
-      <div class="sortbar" id="sortbar">${sortBtn("added")}${sortBtn("known")}${sortBtn("todo")}</div>
+      <div class="sortbar" id="sortbar">${sortBtn("added")}${sortBtn("known")}${sortBtn("todo")}${sortBtn("difficulty")}</div>
       <div class="meta"><span>${showing}</span><span class="clear ${active?'show':''}" id="clear">Clear</span></div>
     </div>
     <div class="list home-list">${rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`}</div>`;
@@ -315,13 +376,15 @@ function peopleChips(uids){
   return uids.map(uid=>`<span class="pchip" data-go="/user/${uid}">${avatar(nameOf(uid,"Friend"),colorOf(uid),20)}<span>${esc(nameOf(uid,"Friend"))}</span></span>`).join("");
 }
 function supplyDemandSection(id){
-  const sd=allLists[id]||{known:[],todo:[]};
-  const knownC=sd.known.length, todoC=sd.todo.length;
+  const sd=allLists[id]||{known:[],todo:[],learning:[],diffs:[]};
+  const knownC=sd.known.length, todoC=sd.todo.length, learnC=(sd.learning||[]).length;
   const knownBlock=`<div class="sdgroup"><div class="sdhead"><span class="sdlabel known">${knownIcon} Known by ${knownC}</span></div>
     <div class="pchips">${knownC?peopleChips(sd.known):`<span class="sdnone">Nobody yet</span>`}</div></div>`;
+  const learnBlock=`<div class="sdgroup"><div class="sdhead"><span class="sdlabel learning">${learningIcon} Learning now ${learnC}</span></div>
+    <div class="pchips">${learnC?peopleChips(sd.learning):`<span class="sdnone">Nobody yet</span>`}</div></div>`;
   const todoBlock=`<div class="sdgroup"><div class="sdhead"><span class="sdlabel todo">${todoIcon} Want to learn ${todoC}</span></div>
     <div class="pchips">${todoC?peopleChips(sd.todo):`<span class="sdnone">Nobody yet</span>`}</div></div>`;
-  return `<div class="section"><h3>Supply &amp; demand</h3>${knownBlock}${todoBlock}</div>`;
+  return `<div class="section"><h3>Supply &amp; demand</h3>${knownBlock}${learnBlock}${todoBlock}</div>`;
 }
 function renderSong(id){
   const s=songsMap[id];
@@ -347,8 +410,12 @@ function renderSong(id){
       <a class="apple" href="${L.apple}" target="_blank" rel="noopener">Apple Music</a></div></div>
     <div class="section"><h3>My lists</h3><div class="mystatus">
       <button class="sbtn todo ${e.status==='todo'?'on':''}" data-set="todo" data-id="${id}">To-Do</button>
+      <button class="sbtn learning ${e.status==='learning'?'on':''}" data-set="learning" data-id="${id}">Currently Learning</button>
       <button class="sbtn known ${e.status==='known'?'on':''}" data-set="known" data-id="${id}">Currently Know</button>
       <button class="star ${e.starred?'on':''}" data-star="${id}" aria-label="favorite">${starSvg(e.starred)}</button></div></div>
+    <div class="section"><h3>Difficulty</h3>
+      ${diffRater(id,e.difficulty)}
+      <div class="diffavg">${(()=>{const ad=avgDiff(id);return ad?`Group average <b>${ad.value.toFixed(1)}</b> / 5 &middot; ${ad.count} rating${ad.count!==1?"s":""}`:`No ratings yet &mdash; you&rsquo;re the first`;})()}</div></div>
     ${supplyDemandSection(id)}
     <div class="section"><h3>My notes <button class="expandtog" data-expand="mynotes">Expand</button></h3>
       <textarea class="notes" id="mynotes" placeholder="Your own notes (everyone can see these too).">${esc(myNoteText)}</textarea>
@@ -385,10 +452,12 @@ function renderSong(id){
     else{ b.dataset.confirm="1"; b.textContent="Tap again to permanently delete"; setTimeout(()=>{const x=$("delsong");if(x){delete x.dataset.confirm;x.textContent="Delete this song from the songbook";}},3000); } };
 }
 
-function listItem(s,starred){
+function listItem(s,starred,difficulty){
   const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
+  const diffHtml=difficulty?diffChip(difficulty,`Difficulty ${difficulty}/5`):"";
+  const badges=(tags||diffHtml)?`<div class="badges">${tags}${diffHtml}</div>`:"";
   return `<div class="row" data-id="${s.id}"><button class="star ${starred?'on':''}" data-star="${s.id}" aria-label="favorite">${starSvg(starred)}</button>
-    <div class="rowmain" data-open="${s.id}"><div class="rowtitle">${esc(s.title)}</div><div class="rowartist">${esc(s.artist)}</div>${tags?`<div class="badges">${tags}</div>`:""}</div></div>`;
+    <div class="rowmain" data-open="${s.id}"><div class="rowtitle">${esc(s.title)}</div><div class="rowartist">${esc(s.artist)}</div>${badges}</div></div>`;
 }
 async function renderUser(uid){
   if(!uid){ root.innerHTML=chrome(`<div class="empty"><div class="big">No user</div></div>`,"user"); return; }
@@ -398,28 +467,29 @@ async function renderUser(uid){
   let entries={};
   try{ const snap=await F.getDocs(F.collection(db,"users",uid,"lists")); snap.docs.forEach(d=>entries[d.id]=d.data()); }catch(err){ console.error(err); }
   const collect=status=>Object.entries(entries).filter(([id,v])=>v.status===status&&songsMap[id])
-    .map(([id,v])=>({s:songsMap[id],starred:!!v.starred}))
+    .map(([id,v])=>({s:songsMap[id],starred:!!v.starred,difficulty:v.difficulty||null}))
     .filter(it=> userGenres.size===0 || (it.s.genres||[]).some(g=>userGenres.has(g)))
     .sort((a,b)=>(b.starred?1:0)-(a.starred?1:0)||a.s.title.localeCompare(b.s.title));
-  const known=collect("known"), todo=collect("todo");
-  // genre chips built from everything this person has in either list
+  const learning=collect("learning"), known=collect("known"), todo=collect("todo");
+  // genre chips built from everything this person has in any list
   const ugSet=new Set();
-  Object.entries(entries).forEach(([id,v])=>{ if((v.status==='known'||v.status==='todo')&&songsMap[id]) (songsMap[id].genres||[]).forEach(g=>ugSet.add(g)); });
+  Object.entries(entries).forEach(([id,v])=>{ if((v.status==='known'||v.status==='todo'||v.status==='learning')&&songsMap[id]) (songsMap[id].genres||[]).forEach(g=>ugSet.add(g)); });
   const ugKnown=Object.keys(GENRE_COLORS).filter(g=>ugSet.has(g));
   const ugExtra=[...ugSet].filter(g=>!GENRE_COLORS[g]).sort();
   const ugAll=[...ugKnown,...ugExtra];
   const ugChips = ugAll.length? `<div class="filters" id="ufilters"><button class="chip all ${userGenres.size===0?'on':''}" data-ugenre="__all">All</button>`+
     ugAll.map(g=>`<button class="chip ${userGenres.has(g)?'on':''}" style="--gc:${gcolor(g)}" data-ugenre="${esc(g)}"><span class="dot"></span>${esc(g)}</button>`).join("")+`</div>` : "";
-  const sec=(cls,label,items)=>{ const col=collapsed[cls]?" collapsed":"";
-    return `<div class="listsec ${cls}${col}"><button class="lh" data-collapse="${cls}"><span class="dot"></span><h2>${label}</h2><span class="ct">${items.length}</span><span class="chev">${collapsed[cls]?"\u203A":"\u2304"}</span></button>
-    <div class="list seclist">${items.length?items.map(it=>listItem(it.s,it.starred)).join(""):`<div class="empty" style="padding:24px"><div style="color:var(--faint)">${userGenres.size?"Nothing in this genre.":"Nothing here yet."}</div></div>`}</div></div>`; };
+  const sec=(cls,label,items,cap)=>{ const col=collapsed[cls]?" collapsed":"";
+    return `<div class="listsec ${cls}${col}"><button class="lh" data-collapse="${cls}"><span class="dot"></span><h2>${label}</h2><span class="ct">${items.length}${cap?` / ${cap}`:""}</span><span class="chev">${collapsed[cls]?"\u203A":"\u2304"}</span></button>
+    <div class="list seclist">${items.length?items.map(it=>listItem(it.s,it.starred,it.difficulty)).join(""):`<div class="empty" style="padding:24px"><div style="color:var(--faint)">${userGenres.size?"Nothing in this genre.":"Nothing here yet."}</div></div>`}</div></div>`; };
   const inner=`
     <div style="display:flex;align-items:center;gap:14px;margin:16px 2px 6px">${avatar(pname,pcolor,56)}
       <div><div class="ptitle" style="margin:0;font-size:26px">${esc(pname)}${isMe?" (you)":""}</div>
-      <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${todo.length} to learn${isMe?` &middot; <button class="edit-pencil" id="editname" style="font-size:13px">Edit name</button> &middot; <button class="edit-pencil" id="codebtn" style="font-size:13px">Recovery code</button> &middot; <button class="edit-pencil" id="adminbtn" style="font-size:13px">Admin${isAdmin?" \u2713":""}</button>`:""}</div></div></div>
+      <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${learning.length} learning &middot; ${todo.length} to learn${isMe?` &middot; <button class="edit-pencil" id="editname" style="font-size:13px">Edit name</button> &middot; <button class="edit-pencil" id="codebtn" style="font-size:13px">Recovery code</button> &middot; <button class="edit-pencil" id="adminbtn" style="font-size:13px">Admin${isAdmin?" \u2713":""}</button>`:""}</div></div></div>
     ${(!isMe&&isAdmin)?`<div style="display:flex;gap:8px;margin:0 2px 4px"><button class="minibtn" data-arename="${uid}">Rename</button><button class="minibtn danger" data-aremove="${uid}">Remove person</button></div>`:""}
     ${isMe?"":`<button class="back" data-go="/people" style="padding-top:4px">&larr; All people</button>`}
     ${ugChips}
+    ${sec("learning","Currently Learning",learning,LEARNING_LIMIT)}
     ${sec("known","Currently Know",known)}
     ${sec("todo","To-Do",todo)}`;
   root.innerHTML=chrome(inner,"user");
@@ -465,12 +535,29 @@ function renderSpin(){
   const reel=$("reel"), btn=$("spinbtn"), pick=$("pick");
   const cell=s=>`<div class="slot-cell"><div class="sc-title">${esc(s.title)}</div><div class="sc-artist">${esc(s.artist)}</div></div>`;
   reel.innerHTML=(pool.length?pool:known).map(cell).join("");
+  // The card revealed after a spin. Pulled out so re-renders (e.g. rating the song,
+  // which writes to Firestore and triggers a re-render) can restore it instead of wiping it.
+  const pickCard=w=>{ const ent=myEntry(w.id);
+    return `<div class="pick-card">
+      <div data-open="${w.id}" style="cursor:pointer">
+        <div class="pick-label">Play this one</div>
+        <div class="pick-title">${esc(w.title)}</div>
+        <div class="pick-artist">${esc(w.artist)}</div>
+        <div class="pick-tap">Tap to open the song &rarr;</div>
+      </div>
+      <div class="pick-diff"><span class="pick-diff-l">How hard is it to play?</span>${diffRater(w.id,ent.difficulty)}</div>
+    </div>`; };
+  // Restore the last reveal if we re-rendered (so rating from here doesn't clear it).
+  if(lastSpinPick && songsMap[lastSpinPick]) pick.innerHTML=pickCard(songsMap[lastSpinPick]);
   $("norep").onclick=()=>{ noRepeats=!noRepeats; renderSpin(); };
-  const rs=$("resetspin"); if(rs) rs.onclick=()=>{ spinPlayed.clear(); renderSpin(); };
+  const rs=$("resetspin"); if(rs) rs.onclick=()=>{ spinPlayed.clear(); lastSpinPick=null; renderSpin(); };
   let spinning=false;
   btn.onclick=()=>{
-    if(spinning||pool.length===0) return; spinning=true; pick.innerHTML=""; btn.disabled=true; btn.textContent="Spinning\u2026";
-    const winner=pool[Math.floor(Math.random()*pool.length)];
+    // Recompute the pool live each spin from the current played set — using the stale
+    // closure pool was the no-repeats bug (a just-played song stayed eligible).
+    const livePool=noRepeats? known.filter(s=>!spinPlayed.has(s.id)) : known;
+    if(spinning||livePool.length===0) return; spinning=true; pick.innerHTML=""; lastSpinPick=null; btn.disabled=true; btn.textContent="Spinning\u2026";
+    const winner=livePool[Math.floor(Math.random()*livePool.length)];
     const strip=[]; const spins=18+Math.floor(Math.random()*8);
     for(let i=0;i<spins;i++) strip.push(known[Math.floor(Math.random()*known.length)]);
     strip.push(winner);
@@ -485,12 +572,8 @@ function renderSpin(){
     setTimeout(()=>{
       if(noRepeats) spinPlayed.add(winner.id);
       const remaining = noRepeats ? known.filter(s=>!spinPlayed.has(s.id)).length : known.length;
-      spinning=false;
-      pick.innerHTML=`<div class="pick-card" data-open="${winner.id}">
-        <div class="pick-label">Play this one</div>
-        <div class="pick-title">${esc(winner.title)}</div>
-        <div class="pick-artist">${esc(winner.artist)}</div>
-        <div class="pick-tap">Tap to open the song &rarr;</div></div>`;
+      spinning=false; lastSpinPick=winner.id;
+      pick.innerHTML=pickCard(winner);
       // refresh controls (reset count / pool) without wiping the reveal
       const rb=$("resetspin"); if(rb) rb.textContent=`Reset (${spinPlayed.size} played)`;
       if(noRepeats && remaining===0){ btn.disabled=true; btn.textContent="All played \u2014 reset to spin"; }
@@ -502,6 +585,7 @@ function renderSpin(){
 function render(){
   const r=route();
   if(r.view!=="song" && detachNotes){ detachNotes(); detachNotes=null; notesSongId=null; currentNotes=[]; }
+  if(r.view!=="spin") lastSpinPick=null;
   if(r.view==="home") renderHome();
   else if(r.view==="song") renderSong(r.id);
   else if(r.view==="people") renderPeople();
@@ -516,6 +600,7 @@ document.addEventListener("click",e=>{
   const ex=e.target.closest("[data-expand]"); if(ex){ const ta=$(ex.getAttribute("data-expand")); if(ta){ const on=ta.classList.toggle("expanded"); ex.textContent=on?"Collapse":"Expand"; } return; }
   const ar=e.target.closest("[data-arename]"); if(ar){ e.stopPropagation(); adminRenameSheet(ar.getAttribute("data-arename")); return; }
   const arm=e.target.closest("[data-aremove]"); if(arm){ e.stopPropagation(); adminRemoveSheet(arm.getAttribute("data-aremove")); return; }
+  const dr=e.target.closest("[data-diff]"); if(dr){ e.stopPropagation(); const sid=dr.getAttribute("data-diff"); const lvl=parseInt(dr.getAttribute("data-difflevel"),10); setDifficulty(sid,lvl); return; }
   const g=e.target.closest("[data-go]"); if(g){ go(g.getAttribute("data-go")); return; }
   if(e.target.closest("[data-back]")){ history.length>1?history.back():go("/"); return; }
   const open=e.target.closest("[data-open]"); if(open){ closeSheet(); go("/song/"+open.getAttribute("data-open")); return; }
@@ -540,18 +625,48 @@ document.addEventListener("click",e=>{
    SHEETS
    ============================================================ */
 const scrim=$("scrim"), sheet=$("sheet");
-function openSheet(html){ sheet.innerHTML=`<div class="grip"></div>`+html; scrim.classList.add("open"); sheet.classList.add("open"); }
+function openSheet(html){ sheet.innerHTML=`<div class="grip"></div>`+html; sheet.scrollTop=0; sheet.style.transition=""; sheet.style.transform=""; scrim.classList.add("open"); sheet.classList.add("open"); }
 function closeSheet(){ scrim.classList.remove("open"); sheet.classList.remove("open"); }
 scrim.onclick=closeSheet;
+
+/* Swipe the sheet down to dismiss. Only starts when the sheet is scrolled to the top,
+   so it never fights with scrolling a tall sheet. */
+(function enableSheetSwipe(){
+  let startY=null, dragging=false, dy=0;
+  sheet.addEventListener("touchstart",ev=>{
+    if(!sheet.classList.contains("open")||sheet.scrollTop>0){ startY=null; return; }
+    startY=ev.touches[0].clientY; dragging=false; dy=0;
+  },{passive:true});
+  sheet.addEventListener("touchmove",ev=>{
+    if(startY==null) return;
+    dy=ev.touches[0].clientY-startY;
+    if(dy>0){
+      if(sheet.scrollTop>0 && !dragging){ startY=null; return; }
+      dragging=true; sheet.style.transition="none"; sheet.style.transform=`translateY(${dy}px)`;
+      ev.preventDefault();   // stop the sheet from also scrolling while we drag it down
+    }
+  },{passive:false});
+  const end=()=>{
+    if(startY==null) return; startY=null;
+    if(!dragging) return; dragging=false;
+    sheet.style.transition="";
+    sheet.style.transform="";          // snap back via CSS; if dismissing, removing .open animates it out
+    if(dy>90) closeSheet();
+  };
+  sheet.addEventListener("touchend",end);
+  sheet.addEventListener("touchcancel",end);
+})();
+
 const check=`<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-9"/></svg>`;
 
 function openListSheet(id){
   const s=songsMap[id]; if(!s) return; const e=myEntry(id);
   openSheet(`<h2>${esc(s.title)}</h2><p class="sh-sub">Add to one of your lists</p>
     <button class="opt todo ${e.status==='todo'?'on':''}" data-act="todo"><span class="ic">${check}</span>To-Do list</button>
+    <button class="opt learning ${e.status==='learning'?'on':''}" data-act="learning"><span class="ic">${check}</span>Currently Learning <span class="optsub">max ${LEARNING_LIMIT}</span></button>
     <button class="opt known ${e.status==='known'?'on':''}" data-act="known"><span class="ic">${check}</span>Currently Know</button>
     ${e.status?`<button class="opt remove" data-act="none"><span class="ic">&times;</span>Remove from my lists</button>`:""}`);
-  sheet.querySelectorAll("[data-act]").forEach(b=>b.onclick=async()=>{ const a=b.getAttribute("data-act"); await setStatus(id,a==="none"?null:a); closeSheet(); });
+  sheet.querySelectorAll("[data-act]").forEach(b=>b.onclick=async()=>{ const a=b.getAttribute("data-act"); const ok=await setStatus(id,a==="none"?null:a); if(ok!==false) closeSheet(); });
 }
 
 let pickGenres=new Set();
@@ -561,19 +676,18 @@ function openAddSheet(){
   openSheet(`<h2>Add a song</h2><p class="sh-sub">It joins the shared songbook for everyone</p>
     <div class="field"><label>Song title</label><input class="txt" id="f-title" placeholder="e.g. Wagon Wheel" autocomplete="off"></div>
     <div class="field"><label>Artist</label><input class="txt" id="f-artist" placeholder="e.g. Darius Rucker" autocomplete="off"></div>
-    <div class="field"><label>Genres (optional &mdash; tap any that fit)</label><div class="gpick" id="gpick">${chips}</div>
+    <div class="field"><label>Genres (tap any that fit)</label><div class="gpick" id="gpick">${chips}</div>
       <div class="newg"><input class="txt" id="f-newg" placeholder="Add a new genre&hellip;" autocomplete="off"><button id="addg">Add</button></div></div>
     <button class="save" id="savesong" disabled>Add to songbook</button>`);
-  const valid=()=>{ $("savesong").disabled=!$("f-title").value.trim()||!$("f-artist").value.trim(); };
+  const valid=()=>{ $("savesong").disabled=!$("f-title").value.trim()||pickGenres.size===0; };
   const repaint=()=>sheet.querySelectorAll("[data-pick]").forEach(b=>b.classList.toggle("on",pickGenres.has(b.getAttribute("data-pick"))));
   sheet.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ const g=b.getAttribute("data-pick"); pickGenres.has(g)?pickGenres.delete(g):pickGenres.add(g); repaint(); valid(); });
   $("f-title").addEventListener("input",valid);
-  $("f-artist").addEventListener("input",valid);
   $("addg").onclick=()=>{ const v=$("f-newg").value.trim(); if(!v)return; const g=v.replace(/\s+/g," "); pickGenres.add(g);
     const c=document.createElement("button"); c.className="chip on"; c.style.setProperty("--gc",gcolor(g)); c.setAttribute("data-pick",g); c.innerHTML=`<span class="dot"></span>${esc(g)}`;
     c.onclick=()=>{ pickGenres.has(g)?pickGenres.delete(g):pickGenres.add(g); c.classList.toggle("on"); valid(); }; $("gpick").appendChild(c); $("f-newg").value=""; valid(); };
   $("f-newg").addEventListener("keydown",ev=>{ if(ev.key==="Enter"){ev.preventDefault();$("addg").click();} });
-  $("savesong").onclick=()=>{ const t=$("f-title").value.trim(), a=$("f-artist").value.trim(); if(!t||!a)return;
+  $("savesong").onclick=()=>{ const t=$("f-title").value.trim(), a=$("f-artist").value.trim()||"Unknown"; if(!t||!pickGenres.size)return;
     const norm=x=>x.toLowerCase().replace(/[^a-z0-9]/g,"");
     const dupes=songs.filter(s=>norm(s.title)===norm(t));
     if(dupes.length){ confirmDuplicate(t,a,[...pickGenres],dupes); return; }
@@ -583,7 +697,7 @@ function openAddSheet(){
 async function commitAdd(t,a,genres){ await addSong(t,a,genres); closeSheet(); go("/"); }
 function confirmDuplicate(t,a,genres,dupes){
   const list=dupes.map(s=>{
-    const sd=allLists[s.id]||{known:[],todo:[]};
+    const sd=allLists[s.id]||{known:[],todo:[],learning:[],diffs:[]};
     const who=(s.addedBy&&s.addedBy!=="seed")?`Added by ${esc(nameOf(s.addedBy,s.addedByName))}`:"From the original songbook";
     const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
     return `<div class="dupcard" data-open="${s.id}">
@@ -731,7 +845,6 @@ function showNewCode(){
    BOOT
    ============================================================ */
 if(navigator.storage&&navigator.storage.persist){ navigator.storage.persist().catch(()=>{}); }
-if(screen.orientation&&screen.orientation.lock){ screen.orientation.lock("portrait").catch(()=>{}); }
 if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }
 
 (async function boot(){
