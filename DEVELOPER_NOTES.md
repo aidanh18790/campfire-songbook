@@ -1,7 +1,7 @@
 # Campfire Songbook — Developer Notes
 
 A plain-English map of how the app works, so future-you (or a future Claude session)
-can pick it back up quickly. Last updated at cache version **campfire-v20**.
+can pick it back up quickly. Last updated at cache version **campfire-v21**.
 
 ---
 
@@ -70,7 +70,8 @@ users/{userId}                     <- a person's public profile
 users/{userId}/lists/{songId}      <- which of a person's lists a song is in
   status: "known" | "todo" | "learning" | null
   starred: true/false
-  difficulty: 1..5 | null            <- that person's difficulty rating (NOT stars; stars = favorite)
+  difficulty: 0.5..5 | null           <- that person's difficulty rating, half-steps (NOT stars)
+  diffNote: string                    <- short comment that goes with the rating (e.g. "fingerstyle version")
   updatedAt
 
 meta/init        <- a guard doc; if it exists, the 49 seed songs are already loaded

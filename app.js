@@ -211,14 +211,15 @@ async function savePersonalNote(songId,text){
   if(text.trim()) await F.setDoc(ref,{text:text.trim(),name:me.name,color:me.color,uid:me.uid,updatedAt:F.serverTimestamp()});
   else await F.deleteDoc(ref).catch(()=>{});
 }
-function myEntry(id){ const e=myLists[id]; return {status:(e&&e.status)||null,starred:!!(e&&e.starred),difficulty:(e&&e.difficulty)||null}; }
+function myEntry(id){ const e=myLists[id]; return {status:(e&&e.status)||null,starred:!!(e&&e.starred),difficulty:(e&&e.difficulty)||null,diffNote:(e&&e.diffNote)||""}; }
 function learningCount(){ return Object.values(myLists).filter(v=>v && v.status==='learning').length; }
 // One place that writes (or deletes) the current user's entry for a song. The doc is
 // kept alive if it carries a status, a star, OR a difficulty rating; otherwise removed.
-async function writeEntry(songId,{status,starred,difficulty}){
+async function writeEntry(songId,{status,starred,difficulty,diffNote}){
   const ref=F.doc(db,"users",me.uid,"lists",songId);
+  const note=(diffNote||"").trim();
   if(!status && !starred && !difficulty){ await F.deleteDoc(ref).catch(()=>{}); return; }
-  await F.setDoc(ref,{status:status||null,starred:!!starred,difficulty:difficulty||null,updatedAt:F.serverTimestamp()});
+  await F.setDoc(ref,{status:status||null,starred:!!starred,difficulty:difficulty||null,diffNote:note,updatedAt:F.serverTimestamp()});
 }
 // Returns false if the change was blocked (Currently Learning full), true otherwise.
 async function setStatus(songId,status){
@@ -226,16 +227,22 @@ async function setStatus(songId,status){
   if(status==='learning' && cur.status!=='learning' && learningCount()>=LEARNING_LIMIT){
     toast(`Currently Learning is full (max ${LEARNING_LIMIT}). Move one out first.`); return false;
   }
-  await writeEntry(songId,{status,starred:cur.starred,difficulty:cur.difficulty}); return true;
+  await writeEntry(songId,{status,starred:cur.starred,difficulty:cur.difficulty,diffNote:cur.diffNote}); return true;
 }
 async function toggleStar(songId){
   const cur=myEntry(songId);
-  await writeEntry(songId,{status:cur.status,starred:!cur.starred,difficulty:cur.difficulty});
+  await writeEntry(songId,{status:cur.status,starred:!cur.starred,difficulty:cur.difficulty,diffNote:cur.diffNote});
 }
 async function setDifficulty(songId,level){
   const cur=myEntry(songId);
-  const next=(cur.difficulty===level)?null:level;   // tapping the current value clears it
-  await writeEntry(songId,{status:cur.status,starred:cur.starred,difficulty:next});
+  const next=(cur.difficulty===level)?null:level;       // tapping the current value clears it
+  const note=next?cur.diffNote:"";                        // clearing the rating clears its note too
+  await writeEntry(songId,{status:cur.status,starred:cur.starred,difficulty:next,diffNote:note});
+}
+// Save just the note that accompanies a rating (keeps the rating itself).
+async function saveDiffNote(songId,note){
+  const cur=myEntry(songId);
+  await writeEntry(songId,{status:cur.status,starred:cur.starred,difficulty:cur.difficulty,diffNote:note});
 }
 
 /* ============================================================
@@ -253,11 +260,11 @@ function startListeners(){
     const next={};
     snap.docs.forEach(d=>{
       const uid=d.ref.parent.parent.id, songId=d.id, v=d.data();
-      if(!next[songId]) next[songId]={known:[],todo:[],learning:[],diffs:[]};
+      if(!next[songId]) next[songId]={known:[],todo:[],learning:[],diffs:[],diffBy:[]};
       if(v.status==='known') next[songId].known.push(uid);
       else if(v.status==='todo') next[songId].todo.push(uid);
       else if(v.status==='learning') next[songId].learning.push(uid);
-      if(typeof v.difficulty==='number' && v.difficulty>=1) next[songId].diffs.push(v.difficulty);
+      if(typeof v.difficulty==='number' && v.difficulty>=0.5){ next[songId].diffs.push(v.difficulty); next[songId].diffBy.push({uid,difficulty:v.difficulty,note:(v.diffNote||"").trim()}); }
     });
     allLists=next; rerender();
   },err=>console.warn("collectionGroup lists",err));
@@ -426,7 +433,13 @@ function renderSong(id){
       <button class="star ${e.starred?'on':''}" data-star="${id}" aria-label="favorite">${starSvg(e.starred)}</button></div></div>
     <div class="section"><h3>Difficulty</h3>
       ${diffRater(id,e.difficulty)}
-      <div class="diffavg">${(()=>{const ad=avgDiff(id);return ad?`Group average <b>${ad.value.toFixed(1)}</b> / 5 &middot; ${ad.count} rating${ad.count!==1?"s":""}`:`No ratings yet &mdash; you&rsquo;re the first`;})()}</div></div>
+      <div class="diffnote-wrap">
+        <input class="txt diffnote-in" id="diffnote" maxlength="140" placeholder="${e.difficulty?"Add a note (e.g. fingerstyle arrangement &mdash; harder than open chords)":"Rate it first, then you can add a note"}" value="${esc(e.diffNote)}"${e.difficulty?"":" disabled"}>
+        <button class="savenote" id="savediff" disabled>Save note</button><span class="savedmsg" id="diffsaved"></span></div>
+      <div class="diffavg">${(()=>{const ad=avgDiff(id);return ad?`Group average <b>${ad.value.toFixed(1)}</b> / 5 &middot; ${ad.count} rating${ad.count!==1?"s":""}`:`No ratings yet &mdash; you&rsquo;re the first`;})()}</div>
+      ${(()=>{const by=((allLists[id]&&allLists[id].diffBy)||[]).filter(d=>d.uid!==me.uid).sort((a,b)=>(b.note?1:0)-(a.note?1:0)||b.difficulty-a.difficulty);
+        if(!by.length) return "";
+        return `<div class="diffothers"><div class="diffothers-h">How others rated it</div>${by.map(d=>`<div class="noteitem"><div class="notewho" data-go="/user/${d.uid}">${avatar(nameOf(d.uid),colorOf(d.uid),22)}<span class="nm">${esc(nameOf(d.uid))}</span>${diffChip(d.difficulty)}<span class="dval">${d.difficulty.toFixed(1)}</span></div>${d.note?`<div class="notetext">${linkify(d.note)}</div>`:""}</div>`).join("")}</div>`;})()}</div>
     ${supplyDemandSection(id)}
     <div class="section"><h3>My notes <button class="expandtog" data-expand="mynotes">Expand</button></h3>
       <textarea class="notes" id="mynotes" placeholder="Your own notes (everyone can see these too).">${esc(myNoteText)}</textarea>
@@ -435,11 +448,13 @@ function renderSong(id){
     <button class="ghostbtn danger" id="delsong">Delete this song from the songbook</button>`;
   const _cap={mine:(()=>{const el=$("mynotes");return el?el.value:null;})(),
     mineEx:(()=>{const el=$("mynotes");return el?el.classList.contains("expanded"):false;})(),
+    diff:(()=>{const el=$("diffnote");return el?el.value:null;})(),
     focus:document.activeElement&&document.activeElement.id,sel:(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null};
   root.innerHTML=chrome(inner,"home");
   if(lastSong===id){
     if(_cap.mine!=null){const el=$("mynotes");if(el){el.value=_cap.mine;const sm=$("savemine");if(sm)sm.disabled=(el.value.trim()===myNoteText.trim());}}
     if(_cap.mineEx){const el=$("mynotes");if(el){el.classList.add("expanded");const t=document.querySelector('[data-expand="mynotes"]');if(t)t.textContent="Collapse";}}
+    if(_cap.diff!=null){const el=$("diffnote");if(el){el.value=_cap.diff;const sd=$("savediff");if(sd)sd.disabled=(el.value.trim()===e.diffNote.trim());}}
     if(_cap.focus){const el=$(_cap.focus);if(el){el.focus();if(_cap.sel!=null){try{el.setSelectionRange(_cap.sel,_cap.sel);}catch(e){}}}}
   }
   lastSong=id;
@@ -458,6 +473,11 @@ function renderSong(id){
   const mine=$("mynotes"), savemine=$("savemine"); const orig=myNoteText;
   mine.addEventListener("input",()=>{ savemine.disabled = mine.value.trim()===orig.trim(); });
   savemine.onclick=async()=>{ savemine.disabled=true; myPersonalNotes[id]=mine.value; await savePersonalNote(id,mine.value); $("minesaved").textContent="Saved"; setTimeout(()=>{const m=$("minesaved");if(m)m.textContent="";},1500); };
+  const dnote=$("diffnote"), savediff=$("savediff");
+  if(dnote&&savediff){ const dorig=e.diffNote;
+    dnote.addEventListener("input",()=>{ savediff.disabled = dnote.value.trim()===dorig.trim(); });
+    savediff.onclick=async()=>{ savediff.disabled=true; await saveDiffNote(id,dnote.value); const m=$("diffsaved"); if(m){m.textContent="Saved";setTimeout(()=>{const x=$("diffsaved");if(x)x.textContent="";},1500);} };
+  }
   $("delsong").onclick=async()=>{ const b=$("delsong");
     if(b.dataset.confirm){ await deleteSong(id); go("/"); }
     else{ b.dataset.confirm="1"; b.textContent="Tap again to permanently delete"; setTimeout(()=>{const x=$("delsong");if(x){delete x.dataset.confirm;x.textContent="Delete this song from the songbook";}},3000); } };
@@ -546,6 +566,10 @@ function renderSpin(){
   const reel=$("reel"), btn=$("spinbtn"), pick=$("pick");
   const cell=s=>`<div class="slot-cell"><div class="sc-title">${esc(s.title)}</div><div class="sc-artist">${esc(s.artist)}</div></div>`;
   reel.innerHTML=(pool.length?pool:known).map(cell).join("");
+  // Capture an in-progress note so a re-render (from rating, or a friend's update) doesn't wipe it.
+  const _noteCap={ v:(()=>{const el=$("spindiffnote");return el?el.value:null;})(),
+    foc:document.activeElement&&document.activeElement.id==="spindiffnote",
+    sel:(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null };
   // The card revealed after a spin. Pulled out so re-renders (e.g. rating the song,
   // which writes to Firestore and triggers a re-render) can restore it instead of wiping it.
   const pickCard=w=>{ const ent=myEntry(w.id);
@@ -556,11 +580,23 @@ function renderSpin(){
         <div class="pick-artist">${esc(w.artist)}</div>
         <div class="pick-tap">Tap to open the song &rarr;</div>
       </div>
-      <div class="pick-diff"><span class="pick-diff-l">How hard is it to play?</span>${diffRater(w.id,ent.difficulty)}</div>
+      <div class="pick-diff"><span class="pick-diff-l">How hard is it to play?</span>${diffRater(w.id,ent.difficulty)}
+        <div class="pick-note"><input class="txt diffnote-in" id="spindiffnote" maxlength="140" placeholder="${ent.difficulty?"Optional note (e.g. fingerstyle version)":"Rate it first to add a note"}" value="${esc(ent.diffNote)}"${ent.difficulty?"":" disabled"}>
+          <button class="savenote" id="spinsavediff" disabled>Save note</button><span class="savedmsg" id="spindiffsaved"></span></div>
+      </div>
     </div>`; };
+  // Attach handlers to the note field inside whatever pick card is currently shown.
+  const wirePickNote=sid=>{ const inp=$("spindiffnote"), sv=$("spinsavediff"); if(!inp||!sv) return;
+    const dorig=myEntry(sid).diffNote;
+    inp.addEventListener("input",()=>{ sv.disabled = inp.value.trim()===dorig.trim(); });
+    sv.onclick=async()=>{ sv.disabled=true; await saveDiffNote(sid,inp.value); const m=$("spindiffsaved"); if(m){m.textContent="Saved";setTimeout(()=>{const x=$("spindiffsaved");if(x)x.textContent="";},1500);} }; };
   // Restore the last reveal if we re-rendered (so rating from here doesn't clear it),
   // and keep the landed song parked in the slot window instead of snapping back to the top.
-  if(lastSpinPick && songsMap[lastSpinPick]){ pick.innerHTML=pickCard(songsMap[lastSpinPick]); reel.innerHTML=cell(songsMap[lastSpinPick]); }
+  if(lastSpinPick && songsMap[lastSpinPick]){
+    pick.innerHTML=pickCard(songsMap[lastSpinPick]); reel.innerHTML=cell(songsMap[lastSpinPick]); wirePickNote(lastSpinPick);
+    if(_noteCap.v!=null){ const el=$("spindiffnote"); if(el){ el.value=_noteCap.v; const sv=$("spinsavediff"); if(sv) sv.disabled=(el.value.trim()===myEntry(lastSpinPick).diffNote.trim());
+      if(_noteCap.foc){ el.focus(); if(_noteCap.sel!=null){ try{el.setSelectionRange(_noteCap.sel,_noteCap.sel);}catch(e){} } } } }
+  }
   $("norep").onclick=()=>{ noRepeats=!noRepeats; renderSpin(); };
   const rs=$("resetspin"); if(rs) rs.onclick=()=>{ spinPlayed.clear(); lastSpinPick=null; renderSpin(); };
   let spinning=false;
@@ -585,7 +621,7 @@ function renderSpin(){
       if(noRepeats) spinPlayed.add(winner.id);
       const remaining = noRepeats ? known.filter(s=>!spinPlayed.has(s.id)).length : known.length;
       spinning=false; lastSpinPick=winner.id;
-      pick.innerHTML=pickCard(winner);
+      pick.innerHTML=pickCard(winner); wirePickNote(winner.id);
       // refresh controls (reset count / pool) without wiping the reveal
       const rb=$("resetspin"); if(rb) rb.textContent=`Reset (${spinPlayed.size} played)`;
       if(noRepeats && remaining===0){ btn.disabled=true; btn.textContent="All played \u2014 reset to spin"; }
