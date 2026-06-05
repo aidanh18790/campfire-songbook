@@ -1,7 +1,7 @@
 # Campfire Songbook — Developer Notes
 
 A plain-English map of how the app works, so future-you (or a future Claude session)
-can pick it back up quickly. Last updated at cache version **campfire-v21**.
+can pick it back up quickly. Last updated at cache version **campfire-v22**.
 
 ---
 
@@ -68,10 +68,8 @@ users/{userId}                     <- a person's public profile
   name, color, updatedAt
 
 users/{userId}/lists/{songId}      <- which of a person's lists a song is in
-  status: "known" | "todo" | "learning" | null
+  status: "known" | "todo" | null
   starred: true/false
-  difficulty: 0.5..5 | null           <- that person's difficulty rating, half-steps (NOT stars)
-  diffNote: string                    <- short comment that goes with the rating (e.g. "fingerstyle version")
   updatedAt
 
 meta/init        <- a guard doc; if it exists, the 49 seed songs are already loaded
@@ -237,34 +235,6 @@ If you ever see bars drifting again, this is the part to look at.
 
 ---
 
-## 14. v18 additions (learning list, difficulty, etc.)
-
-- **"Currently Learning" list** — a third personal status alongside known/todo, capped at
-  `LEARNING_LIMIT` (3) songs. Enforced in `setStatus()` (returns `false` and shows a
-  `toast()` if full). Rolled up for everyone in the collection-group listener
-  (`allLists[id].learning`). Renders as the **top** section on personal pages.
-- **Difficulty rating (1–5)** — stored per person on their own list entry as
-  `difficulty` (so it lives next to status/starred; no new collection or index). It is
-  deliberately a bar meter, *not* stars, because stars already mean "favorite/quality."
-  - Write path: `setDifficulty()` → `writeEntry()`. `writeEntry()` is the single place
-    that saves/deletes a list doc: the doc survives if it has a status, a star, OR a
-    difficulty, otherwise it's deleted. `setStatus`/`toggleStar` route through it too so
-    they never clobber a rating.
-  - Rate it on the **song page** and on the **roulette pick card**. Home rows show the
-    **group average** (`avgDiff()` over `allLists[id].diffs`); personal-page rows show
-    **that person's** rating.
-  - Sort-by-difficulty on home (`sortMode==="difficulty"`); unrated songs always sink
-    to the bottom regardless of direction.
-- **Roulette reveal survival** — rating a song from the spin page writes to Firestore,
-  which triggers a re-render. `lastSpinPick` holds the landed song id so `renderSpin()`
-  restores the reveal instead of wiping it. It's cleared when leaving the spin route.
-- **New-genre colors** — `gcolor()` hashes unknown genre names to `GENRE_EXTRA_PAL` so a
-  user-added genre gets its own stable color instead of always being orange.
-- **Swipe-to-dismiss sheets** — `enableSheetSwipe()` adds a drag-down gesture on `#sheet`
-  (only when scrolled to top, so it doesn't fight scrolling). Past ~90px it closes.
-
----
-
 ## 13. Quick glossary of the main state variables
 
 - `me` — `{uid, name, color}` for the current device's profile.
@@ -273,3 +243,17 @@ If you ever see bars drifting again, this is the part to look at.
 - `allLists` — everyone's lists rolled up to `{songId: {known:[uids], todo:[uids]}}`.
 - `usersMap` — `{uid: {name, color}}` for everyone (People tab, names on notes).
 - `isAdmin` — whether admin tools are unlocked on this device.
+
+## 14. Arrangement picker (replaced the free-text rating note)
+
+The per-song difficulty note is no longer a free-text box. It's now a multiple-choice
+**arrangement** picker: **As recorded / Simple strumming / Fingerstyle / Other**. The
+text box only appears when **Other** is selected. Stored in the SAME `diffNote` field as
+before (a preset string, or the custom text for Other) — no data migration; old free-text
+notes read back as an "Other" value. `arrangePicker()` builds it; chip taps are handled in
+the global click handler via `data-arrange`/`data-arrval` (preset = `saveDiffNote(value)`,
+tapping the active one clears it, `__other` opens/closes the box). `arrangeOther` (a Set of
+songIds) tracks whether the Other box is open even before any text is saved, and survives
+background re-renders; clearing a difficulty rating also clears it. Lives on both the song
+page and the spin pick card.
+

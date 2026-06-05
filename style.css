@@ -155,6 +155,17 @@
   .diffnote-wrap{margin-top:14px;}
   .diffnote-in{width:100%;font-size:15px;}
   .diffnote-in:disabled{opacity:.45;}
+  .arrange{margin-top:14px;}
+  .arrange-lbl{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+  .arrange-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .achip{font-size:13.5px;font-weight:600;color:var(--muted);background:var(--card-hi);border:1px solid var(--line);border-radius:999px;padding:9px 15px;cursor:pointer;transition:transform .12s,background .15s,color .15s,border-color .15s;}
+  .achip:active{transform:scale(.94);}
+  .achip.on{color:#241006;background:linear-gradient(180deg,var(--amber) 0%,#d99b3c 100%);border-color:transparent;}
+  .achip:disabled{opacity:.4;cursor:default;}
+  .arrange-other{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+  .pick-diff .arrange{margin-top:0;}
+  .pick-diff .arrange-chips{justify-content:center;}
+  .pick-diff .arrange-other{align-items:center;}
   .diffothers{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:12px;}
   .diffothers-h{font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--muted);}
   .diffothers .notewho .cdiff{margin-left:8px;}

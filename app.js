@@ -67,6 +67,29 @@ function diffRater(songId,current){
   }
   return `<div class="diffrater"><div class="dsegs">${segs}</div><span class="dlabel">${current?diffLabel(current):"Tap to rate"}</span></div>`;
 }
+/* ---------- arrangement ("how do you play it") ---------- */
+// Replaces the old free-text rating note. Three preset choices plus "Other"; the text
+// box only shows for "Other". The chosen value is stored in the SAME `diffNote` field
+// (a preset string, or the custom text for Other), so the rollup, group average, and
+// "how others rated it" list keep working with no data migration. Pre-existing free-text
+// notes simply read back as an "Other" value, which is fine.
+const ARRANGEMENTS=["As recorded","Simple strumming","Fingerstyle"];
+let arrangeOther=new Set(); // songIds where the user has the Other text box open (may be unsaved yet)
+function arrangePicker(songId,current,enabled,inputId,saveId,savedId){
+  const cur=(current||"").trim();
+  const isPreset=ARRANGEMENTS.includes(cur);
+  const otherOpen=arrangeOther.has(songId)||(cur!==""&&!isPreset);   // Other wins if it's open, even before a clear write lands
+  const selPreset=otherOpen?null:(isPreset?cur:null);
+  const dis=enabled?"":" disabled";
+  const chips=ARRANGEMENTS.map(a=>`<button class="achip ${selPreset===a?'on':''}" data-arrange="${songId}" data-arrval="${esc(a)}"${dis}>${esc(a)}</button>`).join("")
+    +`<button class="achip ${otherOpen?'on':''}" data-arrange="${songId}" data-arrval="__other"${dis}>Other</button>`;
+  const boxVal=(cur!==""&&!isPreset)?cur:"";
+  const box=otherOpen
+    ?`<div class="arrange-other"><input class="txt diffnote-in" id="${inputId}" maxlength="140" placeholder="Describe the arrangement&hellip;" value="${esc(boxVal)}"${dis}>
+        <button class="savenote" id="${saveId}" disabled>Save</button><span class="savedmsg" id="${savedId}"></span></div>`
+    :"";
+  return `<div class="arrange-chips">${chips}</div>${box}`;
+}
 // Average difficulty across everyone (from the collection-group rollup in allLists).
 function avgDiff(id){ const sd=allLists[id]; if(!sd||!sd.diffs||!sd.diffs.length) return null; const sum=sd.diffs.reduce((a,b)=>a+b,0); return {value:sum/sd.diffs.length,count:sd.diffs.length}; }
 const searchLinks = (title,artist)=>{ const q=encodeURIComponent(`${title} ${artist}`.trim()); return { spotify:`https://open.spotify.com/search/${q}`, apple:`https://music.apple.com/search?term=${q}` }; };
@@ -236,7 +259,8 @@ async function toggleStar(songId){
 async function setDifficulty(songId,level){
   const cur=myEntry(songId);
   const next=(cur.difficulty===level)?null:level;       // tapping the current value clears it
-  const note=next?cur.diffNote:"";                        // clearing the rating clears its note too
+  const note=next?cur.diffNote:"";                        // clearing the rating clears its arrangement too
+  if(!next) arrangeOther.delete(songId);                  // and collapses any open Other box
   await writeEntry(songId,{status:cur.status,starred:cur.starred,difficulty:next,diffNote:note});
 }
 // Save just the note that accompanies a rating (keeps the rating itself).
@@ -433,9 +457,9 @@ function renderSong(id){
       <button class="star ${e.starred?'on':''}" data-star="${id}" aria-label="favorite">${starSvg(e.starred)}</button></div></div>
     <div class="section"><h3>Difficulty</h3>
       ${diffRater(id,e.difficulty)}
-      <div class="diffnote-wrap">
-        <input class="txt diffnote-in" id="diffnote" maxlength="140" placeholder="${e.difficulty?"Add a note (e.g. fingerstyle arrangement &mdash; harder than open chords)":"Rate it first, then you can add a note"}" value="${esc(e.diffNote)}"${e.difficulty?"":" disabled"}>
-        <button class="savenote" id="savediff" disabled>Save note</button><span class="savedmsg" id="diffsaved"></span></div>
+      <div class="arrange">
+        <div class="arrange-lbl">${e.difficulty?"How are you playing it?":"Rate it first, then pick how you play it"}</div>
+        ${arrangePicker(id,e.diffNote,!!e.difficulty,"diffnote","savediff","diffsaved")}</div>
       <div class="diffavg">${(()=>{const ad=avgDiff(id);return ad?`Group average <b>${ad.value.toFixed(1)}</b> / 5 &middot; ${ad.count} rating${ad.count!==1?"s":""}`:`No ratings yet &mdash; you&rsquo;re the first`;})()}</div>
       ${(()=>{const by=((allLists[id]&&allLists[id].diffBy)||[]).filter(d=>d.uid!==me.uid).sort((a,b)=>(b.note?1:0)-(a.note?1:0)||b.difficulty-a.difficulty);
         if(!by.length) return "";
@@ -474,7 +498,7 @@ function renderSong(id){
   mine.addEventListener("input",()=>{ savemine.disabled = mine.value.trim()===orig.trim(); });
   savemine.onclick=async()=>{ savemine.disabled=true; myPersonalNotes[id]=mine.value; await savePersonalNote(id,mine.value); $("minesaved").textContent="Saved"; setTimeout(()=>{const m=$("minesaved");if(m)m.textContent="";},1500); };
   const dnote=$("diffnote"), savediff=$("savediff");
-  if(dnote&&savediff){ const dorig=e.diffNote;
+  if(dnote&&savediff){ const dorig=dnote.value;
     dnote.addEventListener("input",()=>{ savediff.disabled = dnote.value.trim()===dorig.trim(); });
     savediff.onclick=async()=>{ savediff.disabled=true; await saveDiffNote(id,dnote.value); const m=$("diffsaved"); if(m){m.textContent="Saved";setTimeout(()=>{const x=$("diffsaved");if(x)x.textContent="";},1500);} };
   }
@@ -581,13 +605,12 @@ function renderSpin(){
         <div class="pick-tap">Tap to open the song &rarr;</div>
       </div>
       <div class="pick-diff"><span class="pick-diff-l">How hard is it to play?</span>${diffRater(w.id,ent.difficulty)}
-        <div class="pick-note"><input class="txt diffnote-in" id="spindiffnote" maxlength="140" placeholder="${ent.difficulty?"Optional note (e.g. fingerstyle version)":"Rate it first to add a note"}" value="${esc(ent.diffNote)}"${ent.difficulty?"":" disabled"}>
-          <button class="savenote" id="spinsavediff" disabled>Save note</button><span class="savedmsg" id="spindiffsaved"></span></div>
+        <div class="arrange" style="width:100%">${arrangePicker(w.id,ent.diffNote,!!ent.difficulty,"spindiffnote","spinsavediff","spindiffsaved")}</div>
       </div>
     </div>`; };
   // Attach handlers to the note field inside whatever pick card is currently shown.
   const wirePickNote=sid=>{ const inp=$("spindiffnote"), sv=$("spinsavediff"); if(!inp||!sv) return;
-    const dorig=myEntry(sid).diffNote;
+    const dorig=inp.value;
     inp.addEventListener("input",()=>{ sv.disabled = inp.value.trim()===dorig.trim(); });
     sv.onclick=async()=>{ sv.disabled=true; await saveDiffNote(sid,inp.value); const m=$("spindiffsaved"); if(m){m.textContent="Saved";setTimeout(()=>{const x=$("spindiffsaved");if(x)x.textContent="";},1500);} }; };
   // Restore the last reveal if we re-rendered (so rating from here doesn't clear it),
@@ -649,6 +672,18 @@ document.addEventListener("click",e=>{
   const ar=e.target.closest("[data-arename]"); if(ar){ e.stopPropagation(); adminRenameSheet(ar.getAttribute("data-arename")); return; }
   const arm=e.target.closest("[data-aremove]"); if(arm){ e.stopPropagation(); adminRemoveSheet(arm.getAttribute("data-aremove")); return; }
   const dr=e.target.closest("[data-diff]"); if(dr){ e.stopPropagation(); const sid=dr.getAttribute("data-diff"); const lvl=parseFloat(dr.getAttribute("data-difflevel")); setDifficulty(sid,lvl); return; }
+  const arr=e.target.closest("[data-arrange]"); if(arr){ e.stopPropagation(); if(arr.disabled) return;
+    const sid=arr.getAttribute("data-arrange"), val=arr.getAttribute("data-arrval");
+    const cur=myEntry(sid).diffNote.trim(), isPreset=ARRANGEMENTS.includes(cur);
+    const otherOpen=arrangeOther.has(sid)||(cur!==""&&!isPreset);
+    if(val==="__other"){
+      if(otherOpen){ arrangeOther.delete(sid); if(cur!==""&&!isPreset) saveDiffNote(sid,""); else render(); }  // close (clearing any custom text)
+      else { arrangeOther.add(sid); if(isPreset) saveDiffNote(sid,""); else render(); }                        // open (dropping any preset)
+    } else {
+      arrangeOther.delete(sid);
+      saveDiffNote(sid, cur===val?"":val);   // tap a preset to set it, tap the active one to clear
+    }
+    return; }
   const g=e.target.closest("[data-go]"); if(g){ go(g.getAttribute("data-go")); return; }
   if(e.target.closest("[data-back]")){ history.length>1?history.back():go("/"); return; }
   const open=e.target.closest("[data-open]"); if(open){ closeSheet(); go("/song/"+open.getAttribute("data-open")); return; }
