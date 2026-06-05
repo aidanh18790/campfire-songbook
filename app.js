@@ -547,8 +547,9 @@ function renderSpin(){
       </div>
       <div class="pick-diff"><span class="pick-diff-l">How hard is it to play?</span>${diffRater(w.id,ent.difficulty)}</div>
     </div>`; };
-  // Restore the last reveal if we re-rendered (so rating from here doesn't clear it).
-  if(lastSpinPick && songsMap[lastSpinPick]) pick.innerHTML=pickCard(songsMap[lastSpinPick]);
+  // Restore the last reveal if we re-rendered (so rating from here doesn't clear it),
+  // and keep the landed song parked in the slot window instead of snapping back to the top.
+  if(lastSpinPick && songsMap[lastSpinPick]){ pick.innerHTML=pickCard(songsMap[lastSpinPick]); reel.innerHTML=cell(songsMap[lastSpinPick]); }
   $("norep").onclick=()=>{ noRepeats=!noRepeats; renderSpin(); };
   const rs=$("resetspin"); if(rs) rs.onclick=()=>{ spinPlayed.clear(); lastSpinPick=null; renderSpin(); };
   let spinning=false;
