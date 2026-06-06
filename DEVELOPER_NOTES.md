@@ -1,7 +1,7 @@
 # Campfire Songbook — Developer Notes
 
 A plain-English map of how the app works, so future-you (or a future Claude session)
-can pick it back up quickly. Last updated at cache version **campfire-v28**.
+can pick it back up quickly. Last updated at cache version **campfire-v29**.
 
 ---
 
@@ -70,6 +70,7 @@ users/{userId}                     <- a person's public profile
 users/{userId}/lists/{songId}      <- which of a person's lists a song is in
   status: "known" | "todo" | null
   starred: true/false
+  featured: true/false  <- starred song pinned to the profile's Starred band (set only via the band's Customize picker)
   addedAt   <- when the song first landed on this person's list (set once, preserved on edits)
   updatedAt
 
@@ -392,3 +393,34 @@ so it can be preserved at all (it previously had none).
 **Difficulty is now the second sort option** on both the home and personal pages. Order is now
 Date added / Difficulty / Most known / Most to-do (was Date added / Most known / Most to-do /
 Difficulty). Pure markup order change in the `sortBtn`/`uSortBtn` call sequence; no logic change.
+
+## 21. Re-added: Starred customization, list filters (campfire-v29)
+
+These five features were built once, then lost when an older copy of `app.js` was
+re-uploaded over them. Re-applied on top of v28 (so they coexist with the v28 Filters
+panel, Difficulty-second sort, and the `void el.scrollWidth` scroll-snap fix):
+
+**Collapsible Starred band.** The band header is a `data-collapse="starred"` toggle (new
+`starred` key on the `collapsed` map) with a chevron; `.starsec.collapsed` hides the list.
+
+**Customizable Starred band.** List entries gained a `featured` boolean. On your OWN profile
+a "Customize" link opens `openStarPickSheet()`, listing every starred song with a pin toggle
+(`data-featstar`). `setFeatured(songId,on)` writes the flag idempotently. Band logic: if any
+songs are featured, show exactly those (most-recent-first); else fall back to the 5 most-
+recently-starred (the old default) so it's never empty. Works when viewing others too (you
+see their pins). `writeEntry` preserves `featured` across unrelated edits and force-clears it
+when a song is unstarred. Customize shows only for `isMe`.
+
+**Starred-only filter (personal pages).** "Starred only" chip (`data-ustaronly`, state
+`uStarOnly`, reset on person-switch and Clear) filters all three lists to the person's starred
+songs — on others' pages too. Starred songs already don't float to the top (removed in v25),
+so no sort change was needed.
+
+**"Being learned" filter (home).** "Being learned" chip (`data-learningonly`, state
+`learningOnly`) inside the collapsible Filters panel, filtering to songs at least one person
+currently has in Currently-Learning (via the `allLists[id].learning` rollup). Counted in the
+Filters toggle badge, the "Clear", the home-reset, and the summary line.
+
+**Scroll-snap coverage.** v28 already fixed chip/sort rows snapping left; the new bars
+(`viewfilter` on home, `ustarfilter` on the personal page) were added to the existing
+`_scrollX`/`_scrollUX` capture-restore arrays so they get the same treatment.
