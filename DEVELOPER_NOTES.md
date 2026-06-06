@@ -1,7 +1,7 @@
 # Campfire Songbook — Developer Notes
 
 A plain-English map of how the app works, so future-you (or a future Claude session)
-can pick it back up quickly. Last updated at cache version **campfire-v24**.
+can pick it back up quickly. Last updated at cache version **campfire-v26**.
 
 ---
 
@@ -70,6 +70,7 @@ users/{userId}                     <- a person's public profile
 users/{userId}/lists/{songId}      <- which of a person's lists a song is in
   status: "known" | "todo" | null
   starred: true/false
+  addedAt   <- when the song first landed on this person's list (set once, preserved on edits)
   updatedAt
 
 meta/init        <- a guard doc; if it exists, the 49 seed songs are already loaded
@@ -286,3 +287,71 @@ entries to the tab still start at top.
 Also: the arrangement each person picked ("Plays it · Fingerstyle", etc.) is shown to
 everyone under their name in the "How others rated it" block on the song page — it's the
 same `diffNote` field, prefixed with a muted "Plays it ·" label for clarity.
+
+## 17. List-view scroll memory, add-to-list on create, adder filter, personal-page filters (campfire-v25)
+
+Four related changes:
+
+**Scroll memory.** `keepScroll(key)` (a helper) restores a list view's `.wrap` scrollTop
+from a module-level `scrollMem` map and re-records it on scroll. Home uses key `"home"`,
+each personal page uses `"user:<uid>"`. Because the position is remembered per view in a
+module variable, leaving a song (or rating one, or any re-render) and coming back no
+longer snaps the list to the top. Song pages still intentionally open at the top.
+
+**Add directly to a list.** The Add-a-song sheet has an optional "Add to my list"
+selector (To-Do / Currently Learning / Currently Know). `addSong()` now returns the new
+doc id; `commitAdd(t,a,genres,status)` calls `setStatus(id,status)` after creating the
+song. The chosen status threads through `confirmDuplicate(...,status)` too. The Learning
+cap still applies (if full, the song is added but a toast explains it wasn't put in
+Learning).
+
+**Added-by filter (home).** A second chip row ("Anyone" + one chip per distinct adder,
+shown only when there are ≥2 adders) filters the songbook by who added each song. State:
+`addedByFilter` (a uid, `"seed"` for the original songbook, or null). Cleared by "Clear".
+
+**Personal-page parity.** The personal page now has the same controls as home: search,
+genre include/exclude chips (3-state, same cycle), the added-by filter, and the sort bar
+(Date added / Most known / Most to-do / Difficulty with a direction toggle). These use a
+SEPARATE state set (`uQuery`, `userGenresInc`, `userGenresExc`, `uSort`, `uSortDir`,
+`uAdder`) so filtering your own lists never touches the main page, and they reset when you
+switch to a different person. The filter/sort logic is shared via `songMatches()` and
+`songCmp()` (also now used by `filteredSongs()`); `addersOf(list)` builds the adder chips.
+Note: the old "starred songs float to the top" behavior on the personal page is replaced
+by the explicit sort order.
+
+## 18. Personal-page refinements + starred band + home reset (campfire-v26)
+
+A batch of personal-page (`renderUser`) and home-tab tweaks:
+
+**Added-by filter removed from the personal page.** The `uAdder` state, the `data-uadder`
+chip row, and its click handler are gone — it was clutter on a person's own lists. The
+home-page added-by filter (`addedByFilter`) is unchanged. `addersOf()` is still used by
+home. Supersedes the personal-page added-by filter introduced in section 17.
+
+**Personal search bar matches home.** The input styling moved from the `#search` selector
+to `.searchbar input`, so the personal page's `#usearch` (and any future search box) gets
+the exact same look (rounded card, focus state) instead of falling back to an unstyled
+input.
+
+**"Date added" = added to THIS person's list.** On a personal page the "Date added" sort
+no longer uses the song's `sortKey` (when it joined the songbook). It now sorts by the
+person's list entry timestamp via a personal comparator `uCmp` (falls back to the shared
+`songCmp` for the other modes). To support this, list entries now carry an `addedAt`
+field, set once in `writeEntry()` the first time a song lands on the list and preserved on
+later edits (`(prev&&prev.addedAt)||serverTimestamp()`). `tsMillis()` reads a Firestore
+Timestamp to ms; a pending (unresolved) timestamp is treated as "now" so a freshly added
+song stays at the top instead of flickering to the bottom. Old entries without `addedAt`
+fall back to `updatedAt`. Default direction is still desc (most-recent first).
+
+**Starred favourites band.** Every personal profile (yours and others') shows a compact
+"Starred" section at the very top, above the search/sort controls, capped at 5 songs and
+ordered most-recent-first. It's built from the person's `starred` entries (`starRow()` +
+`.starsec`/`.starrow` CSS — tighter rows than the normal list items). A starred song still
+appears in its normal status list below; the band is purely an additional quick-access
+view. (This is also how "see someone else's starred at the top" is satisfied.)
+
+**Home button resets only when already on home.** Tapping the home nav button or the logo
+(`data-go="/"`) while the current route is already `home` clears `query`, the genre
+include/exclude sets, `addedByFilter`, and the remembered home scroll, then re-renders.
+From any other tab it just navigates home, leaving the previous search intact (the
+`scrollMem["home"]` + state preservation from section 17 still restores where you were).

@@ -100,6 +100,9 @@ function initialsOf(name){ const p=String(name||"?").trim().split(/\s+/).filter(
 function avatar(name,color,size){ const fs=Math.round(size*0.4); return `<span class="av" style="width:${size}px;height:${size}px;background:${color||'#c8a86a'};font-size:${fs}px">${esc(initialsOf(name))}</span>`; }
 function nameOf(uid,fallback){ return (usersMap[uid]&&usersMap[uid].name)||fallback||"Friend"; }
 function colorOf(uid,fallback){ return (usersMap[uid]&&usersMap[uid].color)||fallback||colorFor(uid); }
+// Firestore Timestamp -> milliseconds (0 if missing). Used to sort a person's lists by
+// when a song was added to THEIR list (not when it joined the songbook).
+function tsMillis(ts){ if(!ts) return 0; if(typeof ts.toMillis==="function") return ts.toMillis(); if(typeof ts.seconds==="number") return ts.seconds*1000; return 0; }
 
 /* ---------- seed ---------- */
 function seedRows(){
@@ -143,7 +146,7 @@ let sortMode="added", sortDir="desc";  // added|known|todo|difficulty ; desc|asc
 let collapsed={known:false,todo:false,learning:false};
 // Personal-page filters/sorters — mirror the home page but kept independent so filtering
 // your own lists never changes the main page (and vice versa). Reset when you switch people.
-let uQuery="", userGenresInc=new Set(), userGenresExc=new Set(), uSort="added", uSortDir="desc", uAdder=null;
+let uQuery="", userGenresInc=new Set(), userGenresExc=new Set(), uSort="added", uSortDir="desc";
 let scrollMem={};              // remembers each list view's scroll so leaving/returning doesn't jump to top
 let noRepeats=false, spinPlayed=new Set();
 let lastSpinPick=null;     // id of the song the wheel last landed on (survives re-renders so rating it doesn't wipe the reveal)
@@ -247,7 +250,9 @@ async function writeEntry(songId,{status,starred,difficulty,diffNote}){
   const ref=F.doc(db,"users",me.uid,"lists",songId);
   const note=(diffNote||"").trim();
   if(!status && !starred && !difficulty){ await F.deleteDoc(ref).catch(()=>{}); return; }
-  await F.setDoc(ref,{status:status||null,starred:!!starred,difficulty:difficulty||null,diffNote:note,updatedAt:F.serverTimestamp()});
+  const prev=myLists[songId];
+  const addedAt=(prev&&prev.addedAt)||F.serverTimestamp();   // stamp the first time a song lands on the list; later edits keep it
+  await F.setDoc(ref,{status:status||null,starred:!!starred,difficulty:difficulty||null,diffNote:note,addedAt,updatedAt:F.serverTimestamp()});
 }
 // Returns false if the change was blocked (Currently Learning full), true otherwise.
 async function setStatus(songId,status){
@@ -544,6 +549,11 @@ function renderSong(id){
     else{ b.dataset.confirm="1"; b.textContent="Tap again to permanently delete"; setTimeout(()=>{const x=$("delsong");if(x){delete x.dataset.confirm;x.textContent="Delete this song from the songbook";}},3000); } };
 }
 
+// Compact row for the "Starred" favourites band at the top of a personal profile.
+function starRow(s){
+  return `<div class="starrow" data-open="${s.id}"><span class="si">${starSvg(true)}</span>
+    <div class="st"><div class="stt">${esc(s.title)}</div><div class="sa">${esc(s.artist)}</div></div></div>`;
+}
 function listItem(s,starred,difficulty){
   const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
   const diffHtml=difficulty?diffChip(difficulty,`Difficulty ${difficulty}/5`):"";
@@ -553,21 +563,43 @@ function listItem(s,starred,difficulty){
 }
 async function renderUser(uid){
   if(!uid){ root.innerHTML=chrome(`<div class="empty"><div class="big">No user</div></div>`,"user"); return; }
-  if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="added"; uSortDir="desc"; uAdder=null; lastUserView=uid; }
+  if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="added"; uSortDir="desc"; lastUserView=uid; }
   const isMe=uid===me.uid;
   const pname=nameOf(uid,isMe?me.name:"Friend"), pcolor=colorOf(uid,isMe?me.color:null);
   let entries={};
   try{ const snap=await F.getDocs(F.collection(db,"users",uid,"lists")); snap.docs.forEach(d=>entries[d.id]=d.data()); }catch(err){ console.error(err); }
   const uq=uQuery.trim().toLowerCase();
   const cmp=songCmp(uSort,uSortDir);
+  // On a personal page, "Date added" means added to THIS person's list (their entry's
+  // addedAt), not when the song joined the songbook. Other sort modes reuse the shared
+  // group-metric comparator. A pending (just-written) entry has no resolved timestamp yet,
+  // so treat it as "now" to keep it at the top instead of flickering to the bottom.
+  const entAddedAt=id=>{ const v=entries[id]; if(!v) return 0; return tsMillis(v.addedAt||v.updatedAt)||Date.now(); };
+  const uCmp=(a,b)=>{
+    if(uSort==="added"){
+      const d=entAddedAt(a.s.id)-entAddedAt(b.s.id);
+      if(d!==0) return uSortDir==="asc"?d:-d;
+      return a.s.title.localeCompare(b.s.title);
+    }
+    return cmp(a.s,b.s);
+  };
   const collect=status=>{
     const items=Object.entries(entries).filter(([id,v])=>v.status===status&&songsMap[id])
       .map(([id,v])=>({s:songsMap[id],starred:!!v.starred,difficulty:v.difficulty||null}))
-      .filter(it=>songMatches(it.s,uq,userGenresInc,userGenresExc,uAdder));
-    items.sort((a,b)=>cmp(a.s,b.s));
+      .filter(it=>songMatches(it.s,uq,userGenresInc,userGenresExc));
+    items.sort(uCmp);
     return items;
   };
   const learning=collect("learning"), known=collect("known"), todo=collect("todo");
+  // Starred favourites band (max 5) shown at the very top of the profile. A starred song
+  // still appears in its normal status list below — this is purely an extra quick-access view.
+  const starred=Object.entries(entries)
+    .filter(([id,v])=>v.starred&&songsMap[id])
+    .map(([id,v])=>({s:songsMap[id],at:tsMillis(v.addedAt||v.updatedAt)||Date.now()}))
+    .sort((a,b)=>b.at-a.at)
+    .slice(0,5);
+  const starHtml = starred.length? `<div class="starsec"><div class="sh"><span class="si">${starSvg(true)}</span><span class="lbl">Starred</span><span class="ct">${starred.length}</span></div>
+    <div class="list starlist">${starred.map(it=>starRow(it.s)).join("")}</div></div>` : "";
   // The person's full song set (any list) — used to build the filter chips so they don't
   // vanish as you filter.
   const personSongs=Object.entries(entries)
@@ -579,17 +611,14 @@ async function renderUser(uid){
   const ugAll=[...ugKnown,...ugExtra];
   const ugChips = ugAll.length? `<div class="filters" id="ufilters"><button class="chip all ${(userGenresInc.size===0&&userGenresExc.size===0)?'on':''}" data-ugenre="__all">All</button>`+
     ugAll.map(g=>{const gi=userGenresInc.has(g),ge=userGenresExc.has(g);return `<button class="chip ${gi?'on':''} ${ge?'exc':''}" style="--gc:${gcolor(g)}" data-ugenre="${esc(g)}"><span class="dot"></span>${esc(g)}</button>`;}).join("")+`</div>` : "";
-  const uAdders=addersOf(personSongs);
-  const uAdderRow = uAdders.length>=2 ? `<div class="filters" id="uadderfilter"><button class="chip all ${!uAdder?'on':''}" data-uadder="__all">Anyone</button>`+
-    uAdders.map(([k,label])=>`<button class="chip ${uAdder===k?'on':''}" data-uadder="${esc(k)}">${avatar(label,k==="seed"?"#c8a86a":colorOf(k),16)}${esc(label)}</button>`).join("")+`</div>` : "";
   const uArrow=m=> uSort!==m?"" : (uSortDir==="desc"?" \u2193":" \u2191");
   const lbl={added:"Date added",known:"Most known",todo:"Most to-do",difficulty:"Difficulty"};
   const uSortBtn=m=>`<button class="sortbtn ${uSort===m?'on':''}" data-usort="${m}">${lbl[m]}${uArrow(m)}</button>`;
-  const uActive=(userGenresInc.size||userGenresExc.size||uQuery.trim()||uAdder);
+  const uActive=(userGenresInc.size||userGenresExc.size||uQuery.trim());
   const controls=`<div class="homectl" style="margin-top:8px">
       <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
         <input id="usearch" type="text" placeholder="Search ${isMe?"your":esc(pname)+"\u2019s"} lists&hellip;" autocomplete="off" value="${esc(uQuery)}"></div>
-      ${ugChips}${uAdderRow}
+      ${ugChips}
       <div class="sortbar">${uSortBtn("added")}${uSortBtn("known")}${uSortBtn("todo")}${uSortBtn("difficulty")}</div>
       ${uActive?`<div class="meta"><span></span><span class="clear show" data-uclear="1">Clear filters</span></div>`:""}
     </div>`;
@@ -602,6 +631,7 @@ async function renderUser(uid){
       <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${learning.length} learning &middot; ${todo.length} to learn${isMe?` &middot; <button class="edit-pencil" id="editname" style="font-size:13px">Edit name</button> &middot; <button class="edit-pencil" id="codebtn" style="font-size:13px">Recovery code</button> &middot; <button class="edit-pencil" id="adminbtn" style="font-size:13px">Admin${isAdmin?" \u2713":""}</button> &middot; <button class="edit-pencil" id="signoutbtn" style="font-size:13px">Sign out</button>`:""}</div></div></div>
     ${(!isMe&&isAdmin)?`<div style="display:flex;gap:8px;margin:0 2px 4px"><button class="minibtn" data-arename="${uid}">Rename</button><button class="minibtn danger" data-aremove="${uid}">Remove person</button></div>`:""}
     ${isMe?"":`<button class="back" data-go="/people" style="padding-top:4px">&larr; All people</button>`}
+    ${starHtml}
     ${controls}
     ${sec("learning","Currently Learning",learning,LEARNING_LIMIT)}
     ${sec("known","Currently Know",known)}
@@ -753,7 +783,11 @@ document.addEventListener("click",e=>{
       saveDiffNote(sid, cur===val?"":val);   // tap a preset to set it, tap the active one to clear
     }
     return; }
-  const g=e.target.closest("[data-go]"); if(g){ go(g.getAttribute("data-go")); return; }
+  const g=e.target.closest("[data-go]"); if(g){ const dest=g.getAttribute("data-go");
+    // Tapping home (nav or logo) while ALREADY on the home tab resets search/filters/scroll.
+    // From any other tab it just navigates home, leaving the previous search intact.
+    if(dest==="/" && route().view==="home"){ query=""; activeGenres.clear(); excludeGenres.clear(); addedByFilter=null; scrollMem["home"]=0; renderHome(); return; }
+    go(dest); return; }
   if(e.target.closest("[data-back]")){ history.length>1?history.back():go("/"); return; }
   const open=e.target.closest("[data-open]"); if(open){ closeSheet(); go("/song/"+open.getAttribute("data-open")); return; }
   const plus=e.target.closest("[data-plus]"); if(plus){ e.stopPropagation(); openListSheet(plus.getAttribute("data-plus")); return; }
@@ -765,11 +799,10 @@ document.addEventListener("click",e=>{
     else if(userGenresExc.has(v)){ userGenresExc.delete(v); }                              // exclude -> off
     else { userGenresInc.add(v); }                                                         // off -> include
     render(); return; }
-  const uad=e.target.closest("[data-uadder]"); if(uad){ const v=uad.getAttribute("data-uadder"); uAdder=(v==="__all")?null:v; render(); return; }
   const ust=e.target.closest("[data-usort]"); if(ust){ const m=ust.getAttribute("data-usort");
     if(uSort===m){ uSortDir=uSortDir==="desc"?"asc":"desc"; } else { uSort=m; uSortDir="desc"; }
     render(); return; }
-  const ucl=e.target.closest("[data-uclear]"); if(ucl){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uAdder=null; render(); return; }
+  const ucl=e.target.closest("[data-uclear]"); if(ucl){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); render(); return; }
   const sb=e.target.closest("[data-sort]"); if(sb){ const m=sb.getAttribute("data-sort");
     if(sortMode===m){ sortDir=sortDir==="desc"?"asc":"desc"; } else { sortMode=m; sortDir="desc"; }
     renderHome(); return; }
