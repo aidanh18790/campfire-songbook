@@ -448,7 +448,7 @@ function renderHome(){
     <div class="homectl">
       <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
         <input id="search" type="text" placeholder="Search songs or artists&hellip;" autocomplete="off" value="${esc(query)}"></div>
-      <div class="ctlbar">${filterToggle}<div class="sortbar" id="sortbar">${sortBtn("added")}${sortBtn("known")}${sortBtn("todo")}${sortBtn("difficulty")}</div></div>
+      <div class="ctlbar">${filterToggle}<div class="sortbar" id="sortbar">${sortBtn("added")}${sortBtn("difficulty")}${sortBtn("known")}${sortBtn("todo")}</div></div>
       <div class="filterpanel ${filtersOpen?'open':''}" id="filterpanel">
         <div class="filters" id="filters">${chips}</div>
         ${adderRow}
@@ -456,9 +456,9 @@ function renderHome(){
       <div class="meta"><span>${showing}</span><span class="clear ${active?'show':''}" id="clear">Clear</span></div>
     </div>
     <div class="list home-list">${rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`}</div>`;
-  const _filScroll=(()=>{const f=$("filters");return f?f.scrollLeft:0;})();
+  const _scrollX={}; ["filters","adderfilter","sortbar"].forEach(k=>{const el=$(k);if(el)_scrollX[k]=el.scrollLeft;});
   root.innerHTML=chrome(inner,"home")+`<button class="fab" id="fab"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>Add a Song</button>`+`<button class="totop" id="totop"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14V5M4 9l5-5 5 5"/></svg>Top</button>`;
-  (()=>{const f=$("filters");if(f)f.scrollLeft=_filScroll;})();
+  Object.keys(_scrollX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollX[k];}});
   keepScroll("home");
   const si=$("search"); if(si){ si.addEventListener("input",e=>{ query=e.target.value; renderHome(); const n=$("search"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }); }
   $("fab").onclick=openAddSheet; const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();excludeGenres.clear();query="";addedByFilter=null;renderHome();};
@@ -636,7 +636,7 @@ async function renderUser(uid){
       <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
         <input id="usearch" type="text" placeholder="Search ${isMe?"your":esc(pname)+"\u2019s"} lists&hellip;" autocomplete="off" value="${esc(uQuery)}"></div>
       ${ugChips}
-      <div class="sortbar">${uSortBtn("added")}${uSortBtn("known")}${uSortBtn("todo")}${uSortBtn("difficulty")}</div>
+      <div class="sortbar" id="usortbar">${uSortBtn("added")}${uSortBtn("difficulty")}${uSortBtn("known")}${uSortBtn("todo")}</div>
       ${uActive?`<div class="meta"><span></span><span class="clear show" data-uclear="1">Clear filters</span></div>`:""}
     </div>`;
   const sec=(cls,label,items,cap)=>{ const col=collapsed[cls]?" collapsed":"";
@@ -655,10 +655,10 @@ async function renderUser(uid){
     ${sec("todo","To-Do",todo)}`;
   const _focId=document.activeElement&&document.activeElement.id;
   const _sel=(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null;
-  const _ufScroll=(()=>{const f=$("ufilters");return f?f.scrollLeft:0;})();
+  const _scrollUX={}; ["ufilters","usortbar"].forEach(k=>{const el=$(k);if(el)_scrollUX[k]=el.scrollLeft;});
   root.innerHTML=chrome(inner,"user");
   keepScroll("user:"+uid);
-  (()=>{const f=$("ufilters");if(f)f.scrollLeft=_ufScroll;})();
+  Object.keys(_scrollUX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollUX[k];}});
   if(_focId){ const el=$(_focId); if(el){ el.focus(); if(_sel!=null){ try{el.setSelectionRange(_sel,_sel);}catch(e){} } } }
   const usi=$("usearch"); if(usi) usi.addEventListener("input",e=>{ uQuery=e.target.value; renderUser(uid); });
   const en=$("editname"); if(en) en.onclick=openEditName;

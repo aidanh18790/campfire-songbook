@@ -1,7 +1,7 @@
 # Campfire Songbook — Developer Notes
 
 A plain-English map of how the app works, so future-you (or a future Claude session)
-can pick it back up quickly. Last updated at cache version **campfire-v27**.
+can pick it back up quickly. Last updated at cache version **campfire-v28**.
 
 ---
 
@@ -376,3 +376,19 @@ bottom for the difficulty sort (unrated). Now "Most known" and "Most to-do" do t
 with a zero count always sorts below any song with a count, regardless of asc/desc direction
 (so flipping direction reorders the songs that HAVE counts without dragging the zeros up to the
 top). Ties and zero/zero pairs fall back to title order. "Date added" is unaffected.
+
+## 20. Chip/sort-row scroll fix + Difficulty reordered second (campfire-v28)
+
+**Tapped chips no longer jump to the left.** Tapping an added-by chip or a sort button
+re-renders the page, which rebuilds the horizontal scroll containers and was resetting their
+`scrollLeft` to 0 — visually sliding the tapped item back to the start of the row. The render
+path already captured/restored `scrollLeft` for these rows, but the restore was being clamped
+to 0 because it ran before the browser had laid out the (initially zero-width) flex row. Fix:
+force a synchronous layout by reading `el.scrollWidth` immediately before assigning
+`el.scrollLeft`. Applied to the home rows (`#filters`, `#adderfilter`, `#sortbar`) and the
+personal rows (`#ufilters`, `#usortbar`). The personal sort bar also gained its `id="usortbar"`
+so it can be preserved at all (it previously had none).
+
+**Difficulty is now the second sort option** on both the home and personal pages. Order is now
+Date added / Difficulty / Most known / Most to-do (was Date added / Most known / Most to-do /
+Difficulty). Pure markup order change in the `sortBtn`/`uSortBtn` call sequence; no logic change.
