@@ -238,11 +238,16 @@
   .listsec .lh .chev{margin-left:auto;color:var(--faint);font-size:20px;line-height:1;width:20px;text-align:center;}
   .listsec.collapsed .seclist{display:none;}
   .starsec{margin:14px 0 2px;}
-  .starsec .sh{display:flex;align-items:center;gap:7px;margin:0 2px 8px;}
-  .starsec .sh .si{color:var(--amber);display:inline-flex;}
+  .starsec .sh{display:flex;align-items:center;gap:8px;margin:0 2px 8px;}
+  .starsec .shtog{flex:1;min-width:0;display:flex;align-items:center;gap:7px;background:none;border:none;cursor:pointer;text-align:left;padding:2px 0;}
+  .starsec .shtog:active{opacity:.7;}
+  .starsec .sh .si{color:var(--amber);display:inline-flex;flex:0 0 auto;}
   .starsec .sh .si svg{width:16px;height:16px;}
   .starsec .sh .lbl{font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:-.01em;color:var(--cream);}
   .starsec .sh .ct{color:var(--faint);font-size:13px;font-weight:600;}
+  .starsec .sh .chev{margin-left:6px;color:var(--faint);font-size:18px;line-height:1;width:18px;text-align:center;flex:0 0 auto;}
+  .starsec .sh .starcustom{margin-left:auto;flex:0 0 auto;padding:2px 0;}
+  .starsec.collapsed .starlist{display:none;}
   .starlist{display:flex;flex-direction:column;gap:4px;}
   .starrow{display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:6px 11px;cursor:pointer;transition:border-color .2s,background .2s,transform .1s;}
   .starrow:active{transform:scale(.993);}
@@ -251,27 +256,6 @@
   .starrow .st{flex:1;min-width:0;}
   .starrow .stt{font-family:'Fraunces',serif;font-weight:600;font-size:14.5px;line-height:1.15;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .starrow .sa{color:var(--muted);font-size:12px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  /* practice streak card (personal page) + badge (People tab) */
-  .streakcard{display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:15px 16px;margin:14px 0 4px;flex-wrap:wrap;transition:border-color .25s,background .25s;}
-  .streakcard.lit{border-color:rgba(255,126,61,.42);background:linear-gradient(180deg,rgba(255,126,61,.09),var(--card));}
-  .streakcard .streak-flame{flex:0 0 auto;width:34px;height:42px;opacity:.38;transition:opacity .3s,filter .3s;}
-  .streakcard .streak-flame .flame{width:34px;height:42px;}
-  .streakcard.lit .streak-flame{opacity:1;filter:drop-shadow(0 0 9px rgba(255,126,61,.5));animation:flicker 5.5s ease-in-out infinite;}
-  .streak-body{flex:1;min-width:0;}
-  .streak-top{display:flex;align-items:baseline;gap:9px;}
-  .streak-num{font-family:'Fraunces',serif;font-weight:800;font-size:34px;line-height:1;letter-spacing:-.02em;color:var(--cream);}
-  .streakcard.lit .streak-num{background:linear-gradient(180deg,var(--amber) 0%,var(--ember) 130%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
-  .streak-lbl{font-size:14px;font-weight:600;color:var(--muted);}
-  .streak-meta{color:var(--faint);font-size:12.5px;margin-top:4px;}
-  .streak-btn{flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;font-weight:700;font-size:14.5px;color:#241006;
-    background:linear-gradient(180deg,var(--ember) 0%,#e8662c 100%);border:none;border-radius:12px;padding:12px 18px;cursor:pointer;
-    box-shadow:0 6px 18px rgba(255,110,45,.28);transition:transform .12s,opacity .2s;}
-  .streak-btn:active{transform:scale(.96);}
-  .streak-btn.done{background:var(--card-hi);color:var(--known);border:1px solid var(--line);box-shadow:none;cursor:default;}
-  @media(max-width:430px){.streak-btn{width:100%;justify-content:center;margin-top:2px;}}
-  .streakbadge{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;font-weight:700;font-size:14px;color:var(--ember-soft);
-    background:rgba(255,126,61,.12);border:1px solid rgba(255,126,61,.25);border-radius:999px;padding:5px 11px 5px 8px;}
-
   .slot{margin:24px auto 0;max-width:420px;}
   .slot-window{position:relative;height:72px;overflow:hidden;border-radius:16px;border:1px solid var(--line-hi);background:rgba(0,0,0,.28);
     box-shadow:inset 0 10px 18px -10px rgba(0,0,0,.7),inset 0 -10px 18px -10px rgba(0,0,0,.7);}

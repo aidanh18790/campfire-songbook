@@ -33,7 +33,6 @@ function gcolor(n){
   return GENRE_EXTRA_PAL[h%GENRE_EXTRA_PAL.length];
 }
 const FLAME=`<svg class="flame" viewBox="0 0 30 38" fill="none"><path d="M15 1C16 9 23 11 23 21c0 6-3.6 10-8 10s-8-4-8-10c0-4 2-6 3-8 .5 3 2 4 3 4-1-4 1-9 2-16Z" fill="url(#fg)"/><path d="M15 14c1 4 4 5 4 9 0 3-1.8 5-4 5s-4-2-4-5c0-2 1-3 2-4 .3 1.5 1.2 2 2 2-.6-2 0-5 0-7Z" fill="#ffe09a"/><defs><linearGradient id="fg" x1="15" y1="1" x2="15" y2="31" gradientUnits="userSpaceOnUse"><stop stop-color="#ffd24a"/><stop offset="1" stop-color="#ff6a2b"/></linearGradient></defs></svg>`;
-const flameSm=`<svg width="13" height="16" viewBox="0 0 30 38" fill="none"><path d="M15 1C16 9 23 11 23 21c0 6-3.6 10-8 10s-8-4-8-10c0-4 2-6 3-8 .5 3 2 4 3 4-1-4 1-9 2-16Z" fill="url(#fgs)"/><defs><linearGradient id="fgs" x1="15" y1="1" x2="15" y2="31" gradientUnits="userSpaceOnUse"><stop stop-color="#ffd24a"/><stop offset="1" stop-color="#ff6a2b"/></linearGradient></defs></svg>`;
 const starSvg = on => `<svg width="20" height="20" viewBox="0 0 20 20" fill="${on?'currentColor':'none'}" stroke="currentColor" stroke-width="1.6"><path d="M10 1.8l2.5 5.1 5.6.8-4 4 .95 5.6L10 14.7 4.9 17.3l1-5.6-4-4 5.6-.8z"/></svg>`;
 const knownIcon=`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 10l4 4 9-10"/></svg>`;
 const todoIcon=`<svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l3 2"/></svg>`;
@@ -143,12 +142,14 @@ let me=null;                 // {uid,name,color}
 let songs=[], songsMap={}, myLists={}, usersMap={}, allLists={};
 let query="", activeGenres=new Set(), excludeGenres=new Set(), online=navigator.onLine, started=false;
 let addedByFilter=null;        // home: filter songs by who added them (uid or "seed"), null = anyone
+let learningOnly=false;        // home: show only songs someone is currently learning
 let filtersOpen=false;         // home: whether the genre + added-by filter panel is expanded
 let sortMode="added", sortDir="desc";  // added|known|todo|difficulty ; desc|asc
-let collapsed={known:false,todo:false,learning:false};
+let collapsed={known:false,todo:false,learning:false,starred:false};
 // Personal-page filters/sorters — mirror the home page but kept independent so filtering
 // your own lists never changes the main page (and vice versa). Reset when you switch people.
 let uQuery="", userGenresInc=new Set(), userGenresExc=new Set(), uSort="added", uSortDir="desc";
+let uStarOnly=false;           // personal page: show only this person's starred songs
 let scrollMem={};              // remembers each list view's scroll so leaving/returning doesn't jump to top
 let noRepeats=false, spinPlayed=new Set();
 let lastSpinPick=null;     // id of the song the wheel last landed on (survives re-renders so rating it doesn't wipe the reveal)
@@ -244,17 +245,21 @@ async function savePersonalNote(songId,text){
   if(text.trim()) await F.setDoc(ref,{text:text.trim(),name:me.name,color:me.color,uid:me.uid,updatedAt:F.serverTimestamp()});
   else await F.deleteDoc(ref).catch(()=>{});
 }
-function myEntry(id){ const e=myLists[id]; return {status:(e&&e.status)||null,starred:!!(e&&e.starred),difficulty:(e&&e.difficulty)||null,diffNote:(e&&e.diffNote)||""}; }
+function myEntry(id){ const e=myLists[id]; return {status:(e&&e.status)||null,starred:!!(e&&e.starred),difficulty:(e&&e.difficulty)||null,diffNote:(e&&e.diffNote)||"",featured:!!(e&&e.featured)}; }
 function learningCount(){ return Object.values(myLists).filter(v=>v && v.status==='learning').length; }
 // One place that writes (or deletes) the current user's entry for a song. The doc is
 // kept alive if it carries a status, a star, OR a difficulty rating; otherwise removed.
-async function writeEntry(songId,{status,starred,difficulty,diffNote}){
+async function writeEntry(songId,{status,starred,difficulty,diffNote,featured}){
   const ref=F.doc(db,"users",me.uid,"lists",songId);
   const note=(diffNote||"").trim();
   if(!status && !starred && !difficulty){ await F.deleteDoc(ref).catch(()=>{}); return; }
   const prev=myLists[songId];
   const addedAt=(prev&&prev.addedAt)||F.serverTimestamp();   // stamp the first time a song lands on the list; later edits keep it
-  await F.setDoc(ref,{status:status||null,starred:!!starred,difficulty:difficulty||null,diffNote:note,addedAt,updatedAt:F.serverTimestamp()});
+  // `featured` pins a starred song to the profile's Starred band. Only the band's Customize
+  // picker sets it; every other edit preserves the prior value, and an unstarred song can't
+  // stay featured.
+  const feat=(!starred)?false:((featured===undefined)?!!(prev&&prev.featured):!!featured);
+  await F.setDoc(ref,{status:status||null,starred:!!starred,difficulty:difficulty||null,diffNote:note,featured:feat,addedAt,updatedAt:F.serverTimestamp()});
 }
 // Returns false if the change was blocked (Currently Learning full), true otherwise.
 async function setStatus(songId,status){
@@ -268,6 +273,13 @@ async function toggleStar(songId){
   const cur=myEntry(songId);
   await writeEntry(songId,{status:cur.status,starred:!cur.starred,difficulty:cur.difficulty,diffNote:cur.diffNote});
 }
+// Pin/unpin a starred song in the profile's Starred band. Idempotent (explicit on/off,
+// not a flip) so rapid taps in the picker can't desync.
+async function setFeatured(songId,on){
+  const cur=myEntry(songId);
+  if(!cur.starred) return;
+  await writeEntry(songId,{status:cur.status,starred:cur.starred,difficulty:cur.difficulty,diffNote:cur.diffNote,featured:!!on});
+}
 async function setDifficulty(songId,level){
   const cur=myEntry(songId);
   const next=(cur.difficulty===level)?null:level;       // tapping the current value clears it
@@ -279,36 +291,6 @@ async function setDifficulty(songId,level){
 async function saveDiffNote(songId,note){
   const cur=myEntry(songId);
   await writeEntry(songId,{status:cur.status,starred:cur.starred,difficulty:cur.difficulty,diffNote:note});
-}
-
-/* ============================================================
-   PRACTICE STREAKS
-   ============================================================ */
-// "Today" is computed from the DEVICE's local date (not server time) so the day
-// boundary matches what the user sees on their own clock. Streak fields live on the
-// user doc (users/{uid}): lastPracticeDay "YYYY-MM-DD", currentStreak, longestStreak,
-// totalDays — so the users listener already surfaces everyone's streak for the People tab.
-function todayKey(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
-function dayGap(a,b){ if(!a||!b) return Infinity; const pa=a.split("-").map(Number), pb=b.split("-").map(Number);
-  const da=new Date(pa[0],pa[1]-1,pa[2]), db=new Date(pb[0],pb[1]-1,pb[2]); return Math.round((db-da)/86400000); }
-// Effective current streak AS OF TODAY. Alive within the one-day grace window (gap<=2:
-// today, yesterday, or a single missed day still recoverable); stale beyond that shows 0.
-// Recomputed on read so a long-dead streak never displays a frozen number on You/People.
-function effStreak(u){ if(!u||!u.lastPracticeDay) return 0; return dayGap(u.lastPracticeDay,todayKey())<=2 ? (u.currentStreak||0) : 0; }
-// Log a practice day. Grace = one missed day is forgiven (a gap of 2 still continues);
-// two missed days in a row (gap>=3) resets to 1. Same-day taps do nothing.
-async function logPractice(){
-  const today=todayKey();
-  const u=usersMap[me.uid]||{};
-  const last=u.lastPracticeDay||null;
-  const gap=last?dayGap(last,today):Infinity;
-  if(gap<=0){ toast("Already logged today \u2713"); return; }   // same day (or clock-skew) — no change
-  const next=(gap<=2)? (u.currentStreak||0)+1 : 1;               // gap 1 = yesterday, gap 2 = grace; 3+ resets
-  const longest=Math.max(u.longestStreak||0,next);
-  const total=(u.totalDays||0)+1;
-  await F.setDoc(F.doc(db,"users",me.uid),{lastPracticeDay:today,currentStreak:next,longestStreak:longest,totalDays:total,updatedAt:F.serverTimestamp()},{merge:true});
-  if(next===1) toast("Streak started \u2014 day 1 \uD83D\uDD25");
-  else toast(`\uD83D\uDD25 ${next}-day streak!`);
 }
 
 /* ============================================================
@@ -443,7 +425,9 @@ function keepScroll(key){
 }
 function filteredSongs(){
   const q=query.trim().toLowerCase();
-  return songs.filter(s=>songMatches(s,q,activeGenres,excludeGenres,addedByFilter)).sort(songCmp(sortMode,sortDir));
+  return songs.filter(s=>songMatches(s,q,activeGenres,excludeGenres,addedByFilter)
+      && (!learningOnly || (((allLists[s.id]&&allLists[s.id].learning)||[]).length>0)))
+    .sort(songCmp(sortMode,sortDir));
 }
 function renderHome(){
   const chips=[`<button class="chip all ${(activeGenres.size===0&&excludeGenres.size===0)?'on':''}" data-genre="__all">All</button>`]
@@ -458,15 +442,17 @@ function renderHome(){
       adders.map(([k,label])=>`<button class="chip ${addedByFilter===k?'on':''}" data-addedby="${esc(k)}">${avatar(label,k==="seed"?"#c8a86a":colorOf(k),16)}${esc(label)}</button>`).join("")+`</div>`
     : "";
   const adderName = addedByFilter ? (addedByFilter==="seed"?"Songbook":nameOf(addedByFilter,"someone")) : null;
+  const viewRow=`<div class="filters" id="viewfilter"><button class="chip ${learningOnly?'on':''}" data-learningonly="1">Being learned</button></div>`;
+  const parts=[];
+  if(inc.length)parts.push(inc.join(" / "));
+  if(exc.length)parts.push("no "+exc.join(" / "));
+  if(adderName)parts.push("by "+adderName);
+  if(learningOnly)parts.push("being learned");
   let showing;
-  if(inc.length||exc.length){
-    const parts=[]; if(inc.length)parts.push(inc.join(" / ")); if(exc.length)parts.push("no "+exc.join(" / "));
-    if(adderName)parts.push("by "+adderName);
-    showing=`${rows.length} song${rows.length!==1?"s":""} \u00b7 ${parts.join(", ")}`;
-  } else if(adderName) showing=`${rows.length} song${rows.length!==1?"s":""} \u00b7 by ${adderName}`;
+  if(parts.length) showing=`${rows.length} song${rows.length!==1?"s":""} \u00b7 ${parts.join(", ")}`;
   else showing=query?`${rows.length} match${rows.length!==1?"es":""}`:"All songs";
-  const active=(activeGenres.size||excludeGenres.size||query||addedByFilter);
-  const filterCount=activeGenres.size+excludeGenres.size+(addedByFilter?1:0);
+  const active=(activeGenres.size||excludeGenres.size||query||addedByFilter||learningOnly);
+  const filterCount=activeGenres.size+excludeGenres.size+(addedByFilter?1:0)+(learningOnly?1:0);
   const arrow=m=> sortMode!==m?"" : (sortDir==="desc"?" \u2193":" \u2191");
   const lbl={added:"Date added",known:"Most known",todo:"Most to-do",difficulty:"Difficulty"};
   const sortBtn=m=>`<button class="sortbtn ${sortMode===m?'on':''}" data-sort="${m}">${lbl[m]}${arrow(m)}</button>`;
@@ -483,16 +469,17 @@ function renderHome(){
       <div class="filterpanel ${filtersOpen?'open':''}" id="filterpanel">
         <div class="filters" id="filters">${chips}</div>
         ${adderRow}
+        ${viewRow}
       </div>
       <div class="meta"><span>${showing}</span><span class="clear ${active?'show':''}" id="clear">Clear</span></div>
     </div>
     <div class="list home-list">${rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`}</div>`;
-  const _scrollX={}; ["filters","adderfilter","sortbar"].forEach(k=>{const el=$(k);if(el)_scrollX[k]=el.scrollLeft;});
+  const _scrollX={}; ["filters","adderfilter","viewfilter","sortbar"].forEach(k=>{const el=$(k);if(el)_scrollX[k]=el.scrollLeft;});
   root.innerHTML=chrome(inner,"home")+`<button class="fab" id="fab"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>Add a Song</button>`+`<button class="totop" id="totop"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14V5M4 9l5-5 5 5"/></svg>Top</button>`;
   Object.keys(_scrollX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollX[k];}});
   keepScroll("home");
   const si=$("search"); if(si){ si.addEventListener("input",e=>{ query=e.target.value; renderHome(); const n=$("search"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }); }
-  $("fab").onclick=openAddSheet; const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();excludeGenres.clear();query="";addedByFilter=null;renderHome();};
+  $("fab").onclick=openAddSheet; const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();excludeGenres.clear();query="";addedByFilter=null;learningOnly=false;renderHome();};
   const ft=$("filtertog"); if(ft) ft.onclick=()=>{ filtersOpen=!filtersOpen; renderHome(); };
   const wrap=document.querySelector(".wrap"), tt=$("totop");
   if(wrap&&tt){
@@ -602,28 +589,6 @@ function starRow(s){
   return `<div class="starrow" data-open="${s.id}"><span class="si">${starSvg(true)}</span>
     <div class="st"><div class="stt">${esc(s.title)}</div><div class="sa">${esc(s.artist)}</div></div></div>`;
 }
-// The practice-streak card. Shown on every profile; the "I practiced today" button only
-// appears on your own (you can't log practice for someone else). Lit/glowing when alive.
-function streakCard(uid,isMe){
-  const u=usersMap[uid]||{};
-  const s=effStreak(u), longest=u.longestStreak||0, total=u.totalDays||0;
-  const lit=s>0;
-  const practicedToday=u.lastPracticeDay===todayKey();
-  const checkmark=`<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M4 10l4 4 9-10"/></svg>`;
-  const btn=isMe
-    ? `<button class="streak-btn ${practicedToday?'done':''}" id="practicebtn">${practicedToday?checkmark+" Practiced today":"I practiced today"}</button>`
-    : "";
-  const meta = longest||total
-    ? `Longest ${longest}${total?` &middot; ${total} day${total===1?"":"s"} practiced`:""}`
-    : (isMe?"Tap below after you practice to start a streak":"No streak yet");
-  return `<div class="streakcard ${lit?'lit':''}">
-    <div class="streak-flame">${FLAME}</div>
-    <div class="streak-body">
-      <div class="streak-top"><span class="streak-num">${s}</span><span class="streak-lbl">day${s===1?"":"s"} in a row</span></div>
-      <div class="streak-meta">${meta}</div>
-    </div>
-    ${btn}</div>`;
-}
 function listItem(s,starred,difficulty){
   const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
   const diffHtml=difficulty?diffChip(difficulty,`Difficulty ${difficulty}/5`):"";
@@ -633,7 +598,7 @@ function listItem(s,starred,difficulty){
 }
 async function renderUser(uid){
   if(!uid){ root.innerHTML=chrome(`<div class="empty"><div class="big">No user</div></div>`,"user"); return; }
-  if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="added"; uSortDir="desc"; lastUserView=uid; }
+  if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="added"; uSortDir="desc"; uStarOnly=false; lastUserView=uid; }
   const isMe=uid===me.uid;
   const pname=nameOf(uid,isMe?me.name:"Friend"), pcolor=colorOf(uid,isMe?me.color:null);
   let entries={};
@@ -656,19 +621,23 @@ async function renderUser(uid){
   const collect=status=>{
     const items=Object.entries(entries).filter(([id,v])=>v.status===status&&songsMap[id])
       .map(([id,v])=>({s:songsMap[id],starred:!!v.starred,difficulty:v.difficulty||null}))
-      .filter(it=>songMatches(it.s,uq,userGenresInc,userGenresExc));
+      .filter(it=>songMatches(it.s,uq,userGenresInc,userGenresExc) && (!uStarOnly||it.starred));
     items.sort(uCmp);
     return items;
   };
   const learning=collect("learning"), known=collect("known"), todo=collect("todo");
-  // Starred favourites band (max 5) shown at the very top of the profile. A starred song
-  // still appears in its normal status list below — this is purely an extra quick-access view.
-  const starred=Object.entries(entries)
+  // Starred favourites band at the top of the profile. If the person has pinned specific
+  // favourites (featured), show exactly those; otherwise fall back to their 5 most-recently-
+  // starred so the band is never empty. A starred song still appears in its normal status
+  // list below — this is purely an extra quick-access view.
+  const starAll=Object.entries(entries)
     .filter(([id,v])=>v.starred&&songsMap[id])
-    .map(([id,v])=>({s:songsMap[id],at:tsMillis(v.addedAt||v.updatedAt)||Date.now()}))
-    .sort((a,b)=>b.at-a.at)
-    .slice(0,5);
-  const starHtml = starred.length? `<div class="starsec"><div class="sh"><span class="si">${starSvg(true)}</span><span class="lbl">Starred</span><span class="ct">${starred.length}</span></div>
+    .map(([id,v])=>({s:songsMap[id],featured:!!v.featured,at:tsMillis(v.addedAt||v.updatedAt)||Date.now()}));
+  const starFeat=starAll.filter(x=>x.featured).sort((a,b)=>b.at-a.at);
+  const starred = starFeat.length ? starFeat : starAll.sort((a,b)=>b.at-a.at).slice(0,5);
+  const starHtml = starred.length? `<div class="starsec ${collapsed.starred?'collapsed':''}"><div class="sh">
+      <button class="shtog" data-collapse="starred"><span class="si">${starSvg(true)}</span><span class="lbl">Starred</span><span class="ct">${starred.length}</span><span class="chev">${collapsed.starred?"\u203A":"\u2304"}</span></button>
+      ${isMe?`<button class="edit-pencil starcustom" id="starcustom">Customize</button>`:""}</div>
     <div class="list starlist">${starred.map(it=>starRow(it.s)).join("")}</div></div>` : "";
   // The person's full song set (any list) — used to build the filter chips so they don't
   // vanish as you filter.
@@ -684,11 +653,13 @@ async function renderUser(uid){
   const uArrow=m=> uSort!==m?"" : (uSortDir==="desc"?" \u2193":" \u2191");
   const lbl={added:"Date added",known:"Most known",todo:"Most to-do",difficulty:"Difficulty"};
   const uSortBtn=m=>`<button class="sortbtn ${uSort===m?'on':''}" data-usort="${m}">${lbl[m]}${uArrow(m)}</button>`;
-  const uActive=(userGenresInc.size||userGenresExc.size||uQuery.trim());
+  const uActive=(userGenresInc.size||userGenresExc.size||uQuery.trim()||uStarOnly);
+  const starFilterRow=`<div class="filters" id="ustarfilter"><button class="chip ${uStarOnly?'on':''}" data-ustaronly="1">Starred only</button></div>`;
   const controls=`<div class="homectl" style="margin-top:8px">
       <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
         <input id="usearch" type="text" placeholder="Search ${isMe?"your":esc(pname)+"\u2019s"} lists&hellip;" autocomplete="off" value="${esc(uQuery)}"></div>
       ${ugChips}
+      ${starFilterRow}
       <div class="sortbar" id="usortbar">${uSortBtn("added")}${uSortBtn("difficulty")}${uSortBtn("known")}${uSortBtn("todo")}</div>
       ${uActive?`<div class="meta"><span></span><span class="clear show" data-uclear="1">Clear filters</span></div>`:""}
     </div>`;
@@ -701,7 +672,6 @@ async function renderUser(uid){
       <div class="psub" style="margin:4px 0 0">${known.length} known &middot; ${learning.length} learning &middot; ${todo.length} to learn${isMe?` &middot; <button class="edit-pencil" id="editname" style="font-size:13px">Edit name</button> &middot; <button class="edit-pencil" id="codebtn" style="font-size:13px">Recovery code</button> &middot; <button class="edit-pencil" id="adminbtn" style="font-size:13px">Admin${isAdmin?" \u2713":""}</button> &middot; <button class="edit-pencil" id="signoutbtn" style="font-size:13px">Sign out</button>`:""}</div></div></div>
     ${(!isMe&&isAdmin)?`<div style="display:flex;gap:8px;margin:0 2px 4px"><button class="minibtn" data-arename="${uid}">Rename</button><button class="minibtn danger" data-aremove="${uid}">Remove person</button></div>`:""}
     ${isMe?"":`<button class="back" data-go="/people" style="padding-top:4px">&larr; All people</button>`}
-    ${streakCard(uid,isMe)}
     ${starHtml}
     ${controls}
     ${sec("learning","Currently Learning",learning,LEARNING_LIMIT)}
@@ -709,7 +679,7 @@ async function renderUser(uid){
     ${sec("todo","To-Do",todo)}`;
   const _focId=document.activeElement&&document.activeElement.id;
   const _sel=(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null;
-  const _scrollUX={}; ["ufilters","usortbar"].forEach(k=>{const el=$(k);if(el)_scrollUX[k]=el.scrollLeft;});
+  const _scrollUX={}; ["ufilters","ustarfilter","usortbar"].forEach(k=>{const el=$(k);if(el)_scrollUX[k]=el.scrollLeft;});
   root.innerHTML=chrome(inner,"user");
   keepScroll("user:"+uid);
   Object.keys(_scrollUX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollUX[k];}});
@@ -719,7 +689,7 @@ async function renderUser(uid){
   const cb=$("codebtn"); if(cb) cb.onclick=openCodeSheet;
   const ab=$("adminbtn"); if(ab) ab.onclick=openAdminSheet;
   const so=$("signoutbtn"); if(so) so.onclick=openSignOutSheet;
-  const pb=$("practicebtn"); if(pb) pb.onclick=logPractice;
+  const sc=$("starcustom"); if(sc) sc.onclick=openStarPickSheet;
 }
 
 function renderPeople(){
@@ -727,9 +697,8 @@ function renderPeople(){
   ids.sort((a,b)=>(a===me.uid?-1:b===me.uid?1:(usersMap[a].name||"").localeCompare(usersMap[b].name||"")));
   const cards=ids.map(uid=>{ const u=usersMap[uid];
     const adminActions = isAdmin?`<div class="padmin"><button class="minibtn" data-arename="${uid}">Rename</button>${uid!==me.uid?`<button class="minibtn danger" data-aremove="${uid}">Remove</button>`:""}</div>`:"";
-    const st=effStreak(u); const streakBadge=st>0?`<div class="streakbadge" title="${st}-day practice streak">${flameSm}${st}</div>`:"";
     return `<div class="person ${uid===me.uid?'merow':''}" data-go="/user/${uid}">${avatar(u.name,u.color,42)}
-      <div style="flex:1;min-width:0"><div class="pn">${esc(u.name||"Friend")}${uid===me.uid?" (you)":""}</div><div class="pc">View their lists &amp; notes</div></div>${streakBadge}${adminActions}</div>`;
+      <div style="flex:1;min-width:0"><div class="pn">${esc(u.name||"Friend")}${uid===me.uid?" (you)":""}</div><div class="pc">View their lists &amp; notes</div></div>${adminActions}</div>`;
   }).join("");
   const inner=`<div class="ptitle">People</div><div class="psub">Tap anyone to see what they know and want to learn${isAdmin?` &middot; <span style="color:var(--amber)">admin on</span>`:""}</div>
     <div class="list" style="gap:10px">${cards||`<div class="empty"><div class="big">Just you so far</div>Share the link to bring friends around the fire.</div>`}</div>`;
@@ -859,7 +828,7 @@ document.addEventListener("click",e=>{
   const g=e.target.closest("[data-go]"); if(g){ const dest=g.getAttribute("data-go");
     // Tapping home (nav or logo) while ALREADY on the home tab resets search/filters/scroll.
     // From any other tab it just navigates home, leaving the previous search intact.
-    if(dest==="/" && route().view==="home"){ query=""; activeGenres.clear(); excludeGenres.clear(); addedByFilter=null; filtersOpen=false; scrollMem["home"]=0; renderHome(); return; }
+    if(dest==="/" && route().view==="home"){ query=""; activeGenres.clear(); excludeGenres.clear(); addedByFilter=null; learningOnly=false; filtersOpen=false; scrollMem["home"]=0; renderHome(); return; }
     go(dest); return; }
   if(e.target.closest("[data-back]")){ history.length>1?history.back():go("/"); return; }
   const open=e.target.closest("[data-open]"); if(open){ closeSheet(); go("/song/"+open.getAttribute("data-open")); return; }
@@ -875,11 +844,13 @@ document.addEventListener("click",e=>{
   const ust=e.target.closest("[data-usort]"); if(ust){ const m=ust.getAttribute("data-usort");
     if(uSort===m){ uSortDir=uSortDir==="desc"?"asc":"desc"; } else { uSort=m; uSortDir="desc"; }
     render(); return; }
-  const ucl=e.target.closest("[data-uclear]"); if(ucl){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); render(); return; }
+  const uso=e.target.closest("[data-ustaronly]"); if(uso){ uStarOnly=!uStarOnly; render(); return; }
+  const ucl=e.target.closest("[data-uclear]"); if(ucl){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uStarOnly=false; render(); return; }
   const sb=e.target.closest("[data-sort]"); if(sb){ const m=sb.getAttribute("data-sort");
     if(sortMode===m){ sortDir=sortDir==="desc"?"asc":"desc"; } else { sortMode=m; sortDir="desc"; }
     renderHome(); return; }
   const adb=e.target.closest("[data-addedby]"); if(adb){ const v=adb.getAttribute("data-addedby"); addedByFilter=(v==="__all")?null:v; renderHome(); return; }
+  const lo=e.target.closest("[data-learningonly]"); if(lo){ learningOnly=!learningOnly; renderHome(); return; }
   const gen=e.target.closest("[data-genre]"); if(gen){ const v=gen.getAttribute("data-genre");
     if(v==="__all"){ activeGenres.clear(); excludeGenres.clear(); }
     else if(activeGenres.has(v)){ activeGenres.delete(v); excludeGenres.add(v); }      // include -> exclude
@@ -1028,6 +999,31 @@ function openCodeSheet(){
     <button class="ghostbtn" id="closecode">Done</button>`);
   $("copycode").onclick=async()=>{ try{ await navigator.clipboard.writeText(me.uid); $("copycode").textContent="Copied \u2713"; }catch(e){ $("copycode").textContent="Select &amp; copy above"; } };
   $("closecode").onclick=closeSheet;
+}
+// Curate which starred songs appear in your profile's Starred band. Pin any number; pin
+// none and the band falls back to your 5 most recent. Writes go straight to each list
+// entry's `featured` flag. The open sheet survives the resulting re-render because it
+// lives in #sheet, not #root.
+function openStarPickSheet(){
+  const stars=Object.entries(myLists)
+    .filter(([id,v])=>v.starred&&songsMap[id])
+    .map(([id,v])=>({s:songsMap[id],featured:!!v.featured,at:tsMillis(v.addedAt||v.updatedAt)||Date.now()}))
+    .sort((a,b)=>b.at-a.at);
+  const rowsHtml = stars.length
+    ? stars.map(x=>`<button class="opt ${x.featured?'on':''}" data-featstar="${x.s.id}">
+        <span class="ic featic" style="background:${x.featured?'var(--amber)':'var(--card-hi)'};color:${x.featured?'#241006':'var(--faint)'}">${starSvg(x.featured)}</span>
+        <div style="flex:1;min-width:0"><div class="rowtitle">${esc(x.s.title)}</div><div class="rowartist">${esc(x.s.artist)}</div></div></button>`).join("")
+    : `<p class="sh-sub">You haven&rsquo;t starred any songs yet. Tap the star on any song to favourite it, then come back to pin your favourites here.</p>`;
+  openSheet(`<h2>Customize Starred band</h2><p class="sh-sub">Pick which starred songs sit at the top of your profile. Choose none and your 5 most recent show automatically.</p>
+    ${rowsHtml}
+    <button class="ghostbtn" id="stardone">Done</button>`);
+  sheet.querySelectorAll("[data-featstar]").forEach(b=>b.onclick=async()=>{
+    const id=b.getAttribute("data-featstar"); const on=!b.classList.contains("on");
+    b.classList.toggle("on",on);
+    const ic=b.querySelector(".featic"); if(ic){ ic.style.background=on?"var(--amber)":"var(--card-hi)"; ic.style.color=on?"#241006":"var(--faint)"; ic.innerHTML=starSvg(on); }
+    await setFeatured(id,on);
+  });
+  $("stardone").onclick=closeSheet;
 }
 function openSignOutSheet(){
   openSheet(`<h2>Sign out?</h2><p class="sh-sub">There are no passwords here &mdash; your recovery code <b>is</b> your account. Save it before you sign out, or you won&rsquo;t be able to get your lists and notes back on this device.</p>
