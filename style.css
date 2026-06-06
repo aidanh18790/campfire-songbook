@@ -224,11 +224,16 @@
   .listsec .lh .chev{margin-left:auto;color:var(--faint);font-size:20px;line-height:1;width:20px;text-align:center;}
   .listsec.collapsed .seclist{display:none;}
   .starsec{margin:14px 0 2px;}
-  .starsec .sh{display:flex;align-items:center;gap:7px;margin:0 2px 8px;}
-  .starsec .sh .si{color:var(--amber);display:inline-flex;}
+  .starsec .sh{display:flex;align-items:center;gap:8px;margin:0 2px 8px;}
+  .starsec .shtog{flex:1;min-width:0;display:flex;align-items:center;gap:7px;background:none;border:none;cursor:pointer;text-align:left;padding:2px 0;}
+  .starsec .shtog:active{opacity:.7;}
+  .starsec .sh .si{color:var(--amber);display:inline-flex;flex:0 0 auto;}
   .starsec .sh .si svg{width:16px;height:16px;}
   .starsec .sh .lbl{font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:-.01em;color:var(--cream);}
   .starsec .sh .ct{color:var(--faint);font-size:13px;font-weight:600;}
+  .starsec .sh .chev{margin-left:6px;color:var(--faint);font-size:18px;line-height:1;width:18px;text-align:center;flex:0 0 auto;}
+  .starsec .sh .starcustom{margin-left:auto;flex:0 0 auto;padding:2px 0;}
+  .starsec.collapsed .starlist{display:none;}
   .starlist{display:flex;flex-direction:column;gap:4px;}
   .starrow{display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:6px 11px;cursor:pointer;transition:border-color .2s,background .2s,transform .1s;}
   .starrow:active{transform:scale(.993);}

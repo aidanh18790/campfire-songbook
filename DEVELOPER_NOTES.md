@@ -1,7 +1,7 @@
 # Campfire Songbook — Developer Notes
 
 A plain-English map of how the app works, so future-you (or a future Claude session)
-can pick it back up quickly. Last updated at cache version **campfire-v26**.
+can pick it back up quickly. Last updated at cache version **campfire-v27**.
 
 ---
 
@@ -70,6 +70,7 @@ users/{userId}                     <- a person's public profile
 users/{userId}/lists/{songId}      <- which of a person's lists a song is in
   status: "known" | "todo" | null
   starred: true/false
+  featured: true/false  <- starred song pinned to the top "Starred" band (only set via the band's Customize picker)
   addedAt   <- when the song first landed on this person's list (set once, preserved on edits)
   updatedAt
 
@@ -355,3 +356,43 @@ view. (This is also how "see someone else's starred at the top" is satisfied.)
 include/exclude sets, `addedByFilter`, and the remembered home scroll, then re-renders.
 From any other tab it just navigates home, leaving the previous search intact (the
 `scrollMem["home"]` + state preservation from section 17 still restores where you were).
+
+## 19. Starred band customization, list filters, horizontal scroll memory (campfire-v27)
+
+Five changes, mostly on the personal page (`renderUser`) and home (`renderHome`):
+
+**Collapsible Starred band.** The Starred band header is now a `data-collapse="starred"`
+toggle (uses the same `collapsed` map as the list sections, with a new `starred` key) and
+shows a chevron. Collapsed state hides `.starlist` via `.starsec.collapsed`.
+
+**Customizable Starred band.** List entries now carry a `featured` boolean. On your OWN
+profile a "Customize" link on the band opens `openStarPickSheet()`, which lists all your
+starred songs with a pin toggle (`data-featstar`). `setFeatured(songId,on)` writes the
+flag idempotently (explicit on/off, not a flip, so fast taps can't desync). The band logic:
+if the person has any featured songs, show exactly those (most-recent-first); otherwise
+fall back to the 5 most-recently-starred (the old default), so it's never empty. This also
+works when viewing other people — you see their pinned picks if they set any. `writeEntry`
+preserves `featured` across unrelated edits (like `addedAt`) and force-clears it whenever a
+song is unstarred. The Customize picker only appears for `isMe`.
+
+**Starred-only filter on personal pages.** A "Starred only" chip (`data-ustaronly`, state
+`uStarOnly`, reset on person-switch and Clear) filters all three status lists to just the
+person's starred songs — works on others' pages too, so you can see what they're starring.
+NOTE: starred songs already do NOT float to the top of the lists (that was removed back in
+v25; sort order is purely the chosen sort), so no change was needed there.
+
+**"Being learned" filter on home.** A "Being learned" chip (`data-learningonly`, state
+`learningOnly`) filters the songbook to songs at least one person currently has in their
+Currently-Learning tier (via the `allLists[id].learning` rollup). Folded into the "Clear",
+the home-reset, and the "showing N songs · …" summary line (which was also refactored into
+a single `parts[]` builder).
+
+**Horizontal scroll memory for ALL chip/sort bars.** Previously only the home genre row
+preserved its horizontal scroll across re-renders; the adder row, sort bars, and personal
+genre row would snap back to the left when you tapped a chip/sort button further right.
+Now `captureBars()` (before `root.innerHTML=`) and `restoreBars()` (after) record/restore
+`scrollLeft` for every `.filters`/`.sortbar` that has an `id`, keyed in a module-level
+`hScrollMem`. Every such bar was given a stable id (`filters`, `adderfilter`, `viewfilter`,
+`sortbar` on home; `ufilters`, `ustarfilter`, `usortbar` on the personal page). The old
+ad-hoc `_filScroll`/`_ufScroll` capture/restore code was removed in favour of this. New
+horizontally-scrollable bars only need an `id` to get the behavior automatically.
