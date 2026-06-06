@@ -66,11 +66,11 @@ songs/{songId}/notes/{userId}      <- per-person notes on a song
 
 users/{userId}                     <- a person's public profile
   name, color, updatedAt
+  lastPracticeDay ("YYYY-MM-DD", local), currentStreak, longestStreak, totalDays  <- practice streaks (section 21)
 
 users/{userId}/lists/{songId}      <- which of a person's lists a song is in
   status: "known" | "todo" | null
   starred: true/false
-  featured: true/false  <- starred song pinned to the profile's Starred band (set only via the band's Customize picker)
   addedAt   <- when the song first landed on this person's list (set once, preserved on edits)
   updatedAt
 
@@ -394,33 +394,43 @@ so it can be preserved at all (it previously had none).
 Date added / Difficulty / Most known / Most to-do (was Date added / Most known / Most to-do /
 Difficulty). Pure markup order change in the `sortBtn`/`uSortBtn` call sequence; no logic change.
 
-## 21. Re-added: Starred customization, list filters (campfire-v29)
+## 21. Practice streaks (campfire-v29)
 
-These five features were built once, then lost when an older copy of `app.js` was
-re-uploaded over them. Re-applied on top of v28 (so they coexist with the v28 Filters
-panel, Difficulty-second sort, and the `void el.scrollWidth` scroll-snap fix):
+A daily-habit motivator aimed at newer players (for whom the random Spin wheel isn't
+useful — too few known songs). One tap = "I practiced today", builds a consecutive-day
+streak. Song-agnostic on purpose: no per-song logging, no friction.
 
-**Collapsible Starred band.** The band header is a `data-collapse="starred"` toggle (new
-`starred` key on the `collapsed` map) with a chevron; `.starsec.collapsed` hides the list.
+**Storage.** Four fields on the user doc (`users/{uid}`): `lastPracticeDay` (a local
+`YYYY-MM-DD` string), `currentStreak`, `longestStreak`, `totalDays`. Because they live on
+the user doc, the existing `users` listener surfaces everyone's streak automatically — no
+new listener, and the People tab gets it for free.
 
-**Customizable Starred band.** List entries gained a `featured` boolean. On your OWN profile
-a "Customize" link opens `openStarPickSheet()`, listing every starred song with a pin toggle
-(`data-featstar`). `setFeatured(songId,on)` writes the flag idempotently. Band logic: if any
-songs are featured, show exactly those (most-recent-first); else fall back to the 5 most-
-recently-starred (the old default) so it's never empty. Works when viewing others too (you
-see their pins). `writeEntry` preserves `featured` across unrelated edits and force-clears it
-when a song is unstarred. Customize shows only for `isMe`.
+**"Today" is the device's LOCAL date** (`todayKey()`), not server time, so the day boundary
+matches the user's own clock. `dayGap(a,b)` diffs two day-keys as local dates → whole days.
 
-**Starred-only filter (personal pages).** "Starred only" chip (`data-ustaronly`, state
-`uStarOnly`, reset on person-switch and Clear) filters all three lists to the person's starred
-songs — on others' pages too. Starred songs already don't float to the top (removed in v25),
-so no sort change was needed.
+**Grace = one forgiven miss.** On each tap (`logPractice()`), comparing today to
+`lastPracticeDay`:
+- gap ≤ 0 (same day, or clock skew) → no change, toast "Already logged today".
+- gap 1 (yesterday) → `currentStreak + 1`.
+- gap 2 (a single missed day) → `currentStreak + 1` — the miss is forgiven.
+- gap ≥ 3 (two+ missed days) → reset to 1.
+So a streak only truly dies after **two** consecutive missed days. `longestStreak` and
+`totalDays` updated alongside.
 
-**"Being learned" filter (home).** "Being learned" chip (`data-learningonly`, state
-`learningOnly`) inside the collapsible Filters panel, filtering to songs at least one person
-currently has in Currently-Learning (via the `allLists[id].learning` rollup). Counted in the
-Filters toggle badge, the "Clear", the home-reset, and the summary line.
+**Stale streaks display as 0 without a background job.** We only ever recompute on tap, so
+a streak that quietly lapsed would otherwise show a frozen number. `effStreak(u)` recomputes
+the *displayed* value on read: alive if `dayGap(lastPracticeDay, today) <= 2`, else 0. Used
+by both the You-page card and the People-tab badge, so views stay honest.
 
-**Scroll-snap coverage.** v28 already fixed chip/sort rows snapping left; the new bars
-(`viewfilter` on home, `ustarfilter` on the personal page) were added to the existing
-`_scrollX`/`_scrollUX` capture-restore arrays so they get the same treatment.
+**UI.** `streakCard(uid,isMe)` renders a card at the top of every personal profile (above the
+Starred band): a flame (lit/glowing when the streak is alive, dim when cold), the current
+number, and longest/total meta. The "I practiced today" button (`#practicebtn`, wired in
+`renderUser`) only appears on your own page; after you log, it shows a done/checkmark state.
+Tapping writes to Firestore → the users listener re-renders (scroll preserved via
+`keepScroll`) and a toast confirms the new count. The **People tab** shows a `.streakbadge`
+(small flame + number) on each person's card when their effective streak > 0 — light social
+motivation, since the app is built around seeing what friends are up to.
+
+**Note on difficulty:** song discovery via the difficulty ratings was considered as a second
+beginner feature but deferred — the 1–5 difficulty scale has seen little use and is
+subjective, so it's not a reliable basis for an "easiest songs next" ladder yet.
