@@ -150,6 +150,7 @@ let collapsed={known:false,todo:false,learning:false,starred:false};
 // your own lists never changes the main page (and vice versa). Reset when you switch people.
 let uQuery="", userGenresInc=new Set(), userGenresExc=new Set(), uSort="added", uSortDir="desc";
 let uStarOnly=false;           // personal page: show only this person's starred songs
+let uFiltersOpen=false;        // personal page: whether the genre + starred filter panel is expanded
 let scrollMem={};              // remembers each list view's scroll so leaving/returning doesn't jump to top
 let noRepeats=false, spinPlayed=new Set();
 let lastSpinPick=null;     // id of the song the wheel last landed on (survives re-renders so rating it doesn't wipe the reveal)
@@ -173,7 +174,23 @@ function newCode(){
   const n=Math.random().toString(36).slice(2,6).toUpperCase();
   return w+"-"+n;
 }
-function normalizeCode(s){ return String(s||"").trim().toLowerCase().replace(/\s+/g,"").replace(/[^a-z0-9-]/g,""); }
+// Recovery codes ARE the Firestore user-doc id, and doc ids are case-sensitive. newCode()
+// produces a lowercase word + an UPPERCASE 4-char suffix (e.g. "ember-A3F9"), and older
+// ids use the "u_..." form with underscores. So we must NOT lowercase here and must keep
+// underscores — otherwise the lookup never matches the stored doc. Just strip whitespace
+// and anything outside the id alphabet.
+function normalizeCode(s){ return String(s||"").trim().replace(/\s+/g,"").replace(/[^A-Za-z0-9_-]/g,""); }
+// A user might type their code in the wrong case. Since we can't do a case-insensitive
+// doc lookup, offer the canonical newCode casing (lowercase word + uppercase suffix) as a
+// fallback candidate. Returns a de-duped list of ids to try, most-likely first.
+function codeCandidates(code){
+  const id=normalizeCode(code);
+  const out=[];
+  if(id) out.push(id);
+  const m=id.match(/^([A-Za-z]+)-([A-Za-z0-9]{4})$/);
+  if(m){ const canon=m[1].toLowerCase()+"-"+m[2].toUpperCase(); if(!out.includes(canon)) out.push(canon); }
+  return out;
+}
 function localId(){
   let id=null; try{ id=localStorage.getItem("cf-uid"); }catch(e){}
   if(!id){ id=newCode(); try{localStorage.setItem("cf-uid",id);}catch(e){} }
@@ -194,15 +211,18 @@ function saveProfile(name,color){
 }
 // Restore an existing profile by its recovery code. Returns the profile or null if not found.
 async function restoreProfile(code){
-  const id=normalizeCode(code);
-  if(!id) return null;
-  let snap; try{ snap=await F.getDoc(F.doc(db,"users",id)); }catch(e){ return null; }
-  if(!snap.exists()) return null;
-  const d=snap.data();
-  setLocalId(id);
-  try{ localStorage.setItem("cf-name",d.name||"Friend"); localStorage.setItem("cf-color",d.color||colorFor(id)); }catch(e){}
-  me={uid:id,name:d.name||"Friend",color:d.color||colorFor(id)};
-  return me;
+  const cands=codeCandidates(code);
+  if(!cands.length) return null;
+  for(const id of cands){
+    let snap; try{ snap=await F.getDoc(F.doc(db,"users",id)); }catch(e){ continue; }
+    if(!snap||!snap.exists()) continue;
+    const d=snap.data();
+    setLocalId(id);
+    try{ localStorage.setItem("cf-name",d.name||"Friend"); localStorage.setItem("cf-color",d.color||colorFor(id)); }catch(e){}
+    me={uid:id,name:d.name||"Friend",color:d.color||colorFor(id)};
+    return me;
+  }
+  return null;
 }
 function setAdmin(on){ isAdmin=on; try{ on?localStorage.setItem("cf-admin","1"):localStorage.removeItem("cf-admin"); }catch(e){} }
 async function sha256(str){ const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str)); return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join(""); }
@@ -254,12 +274,19 @@ async function writeEntry(songId,{status,starred,difficulty,diffNote,featured}){
   const note=(diffNote||"").trim();
   if(!status && !starred && !difficulty){ await F.deleteDoc(ref).catch(()=>{}); return; }
   const prev=myLists[songId];
-  const addedAt=(prev&&prev.addedAt)||F.serverTimestamp();   // stamp the first time a song lands on the list; later edits keep it
   // `featured` pins a starred song to the profile's Starred band. Only the band's Customize
   // picker sets it; every other edit preserves the prior value, and an unstarred song can't
   // stay featured.
   const feat=(!starred)?false:((featured===undefined)?!!(prev&&prev.featured):!!featured);
-  await F.setDoc(ref,{status:status||null,starred:!!starred,difficulty:difficulty||null,diffNote:note,featured:feat,addedAt,updatedAt:F.serverTimestamp()});
+  const data={status:status||null,starred:!!starred,difficulty:difficulty||null,diffNote:note,featured:feat,updatedAt:F.serverTimestamp()};
+  // addedAt marks when the song first landed on this person's list — it must never move on
+  // later edits (starring, status changes, etc.), or the "Date added" sort would jump the
+  // song to the top. Preserve an existing stamp; stamp only a genuinely new entry. A legacy
+  // entry that predates addedAt is deliberately left un-stamped (the personal sort falls back
+  // to the song's own order for those) rather than being pinned to "now" on its first edit.
+  if(prev&&prev.addedAt){ data.addedAt=prev.addedAt; }
+  else if(!prev){ data.addedAt=F.serverTimestamp(); }
+  await F.setDoc(ref,data);
 }
 // Returns false if the change was blocked (Currently Learning full), true otherwise.
 async function setStatus(songId,status){
@@ -598,7 +625,7 @@ function listItem(s,starred,difficulty){
 }
 async function renderUser(uid){
   if(!uid){ root.innerHTML=chrome(`<div class="empty"><div class="big">No user</div></div>`,"user"); return; }
-  if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="added"; uSortDir="desc"; uStarOnly=false; lastUserView=uid; }
+  if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="added"; uSortDir="desc"; uStarOnly=false; uFiltersOpen=false; lastUserView=uid; }
   const isMe=uid===me.uid;
   const pname=nameOf(uid,isMe?me.name:"Friend"), pcolor=colorOf(uid,isMe?me.color:null);
   let entries={};
@@ -609,7 +636,19 @@ async function renderUser(uid){
   // addedAt), not when the song joined the songbook. Other sort modes reuse the shared
   // group-metric comparator. A pending (just-written) entry has no resolved timestamp yet,
   // so treat it as "now" to keep it at the top instead of flickering to the bottom.
-  const entAddedAt=id=>{ const v=entries[id]; if(!v) return 0; return tsMillis(v.addedAt||v.updatedAt)||Date.now(); };
+  // "Date added" = when the song joined THIS person's list. Never fall back to updatedAt:
+  // that field is bumped on every edit (star/status/difficulty), which would make favouriting
+  // a song jump it to the top. Resolved addedAt wins; a just-written entry (addedAt still
+  // pending) is treated as "now" so it settles at the top instead of flickering to the bottom;
+  // a legacy entry with no addedAt at all falls back to the song's own stable order.
+  const entAddedAt=id=>{
+    const v=entries[id]; if(!v) return 0;
+    const t=tsMillis(v.addedAt);
+    if(t) return t;
+    if('addedAt' in v) return Date.now();   // present but unresolved → brand-new write
+    const s=songsMap[id];                    // legacy entry: stable, unaffected by starring
+    return (s&&s.sortKey)||0;
+  };
   const uCmp=(a,b)=>{
     if(uSort==="added"){
       const d=entAddedAt(a.s.id)-entAddedAt(b.s.id);
@@ -654,14 +693,29 @@ async function renderUser(uid){
   const lbl={added:"Date added",known:"Most known",todo:"Most to-do",difficulty:"Difficulty"};
   const uSortBtn=m=>`<button class="sortbtn ${uSort===m?'on':''}" data-usort="${m}">${lbl[m]}${uArrow(m)}</button>`;
   const uActive=(userGenresInc.size||userGenresExc.size||uQuery.trim()||uStarOnly);
+  const uFilterCount=userGenresInc.size+userGenresExc.size+(uStarOnly?1:0);
   const starFilterRow=`<div class="filters" id="ustarfilter"><button class="chip ${uStarOnly?'on':''}" data-ustaronly="1">Starred only</button></div>`;
+  const uFilterToggle=`<button class="filtertog ${uFiltersOpen?'open':''} ${uFilterCount?'active':''}" id="ufiltertog">
+      <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4h14M4.5 9h9M7 14h4"/></svg>
+      Filters${uFilterCount?`<span class="fcount">${uFilterCount}</span>`:""}</button>`;
+  // "Showing" summary — mirrors the home page so the collapsed filters stay legible.
+  const uInc=[...userGenresInc], uExc=[...userGenresExc], uParts=[];
+  if(uInc.length)uParts.push(uInc.join(" / "));
+  if(uExc.length)uParts.push("no "+uExc.join(" / "));
+  if(uStarOnly)uParts.push("starred");
+  const uTotal=known.length+learning.length+todo.length;
+  let uShowing;
+  if(uParts.length) uShowing=`${uTotal} song${uTotal!==1?"s":""} \u00b7 ${uParts.join(", ")}`;
+  else uShowing=uQuery.trim()?`${uTotal} match${uTotal!==1?"es":""}`:`${uTotal} song${uTotal!==1?"s":""}`;
   const controls=`<div class="homectl" style="margin-top:8px">
       <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
         <input id="usearch" type="text" placeholder="Search ${isMe?"your":esc(pname)+"\u2019s"} lists&hellip;" autocomplete="off" value="${esc(uQuery)}"></div>
-      ${ugChips}
-      ${starFilterRow}
-      <div class="sortbar" id="usortbar">${uSortBtn("added")}${uSortBtn("difficulty")}${uSortBtn("known")}${uSortBtn("todo")}</div>
-      ${uActive?`<div class="meta"><span></span><span class="clear show" data-uclear="1">Clear filters</span></div>`:""}
+      <div class="ctlbar">${uFilterToggle}<div class="sortbar" id="usortbar">${uSortBtn("added")}${uSortBtn("difficulty")}${uSortBtn("known")}${uSortBtn("todo")}</div></div>
+      <div class="filterpanel ${uFiltersOpen?'open':''}" id="ufilterpanel">
+        ${ugChips}
+        ${starFilterRow}
+      </div>
+      <div class="meta"><span>${uShowing}</span><span class="clear ${uActive?'show':''}" data-uclear="1">Clear</span></div>
     </div>`;
   const sec=(cls,label,items,cap)=>{ const col=collapsed[cls]?" collapsed":"";
     return `<div class="listsec ${cls}${col}"><button class="lh" data-collapse="${cls}"><span class="dot"></span><h2>${label}</h2><span class="ct">${items.length}${cap?` / ${cap}`:""}</span><span class="chev">${collapsed[cls]?"\u203A":"\u2304"}</span></button>
@@ -685,6 +739,7 @@ async function renderUser(uid){
   Object.keys(_scrollUX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollUX[k];}});
   if(_focId){ const el=$(_focId); if(el){ el.focus(); if(_sel!=null){ try{el.setSelectionRange(_sel,_sel);}catch(e){} } } }
   const usi=$("usearch"); if(usi) usi.addEventListener("input",e=>{ uQuery=e.target.value; renderUser(uid); });
+  const uft=$("ufiltertog"); if(uft) uft.onclick=()=>{ uFiltersOpen=!uFiltersOpen; renderUser(uid); };
   const en=$("editname"); if(en) en.onclick=openEditName;
   const cb=$("codebtn"); if(cb) cb.onclick=openCodeSheet;
   const ab=$("adminbtn"); if(ab) ab.onclick=openAdminSheet;

@@ -424,3 +424,39 @@ Filters toggle badge, the "Clear", the home-reset, and the summary line.
 **Scroll-snap coverage.** v28 already fixed chip/sort rows snapping left; the new bars
 (`viewfilter` on home, `ustarfilter` on the personal page) were added to the existing
 `_scrollX`/`_scrollUX` capture-restore arrays so they get the same treatment.
+
+## 22. Recovery-code fix, favourite-no-jump, personal filters like home (campfire-v30)
+
+Three fixes this pass.
+
+**Recovery codes were failing for essentially everyone.** A recovery code IS the Firestore
+`users/{id}` doc id, and doc ids are case-sensitive. `newCode()` generates a lowercase word
+plus an **UPPERCASE** 4-char suffix (e.g. `ember-A3F9`), stored verbatim. But `normalizeCode()`
+was calling `.toLowerCase()`, so a restore attempt looked up `ember-a3f9` — a different,
+non-existent doc — and always returned "not found". The old `[^a-z0-9-]` allowlist also stripped
+the underscores in legacy `u_...` ids. Fix: `normalizeCode()` now preserves case and keeps
+underscores (`[^A-Za-z0-9_-]`, no lowercasing). Added `codeCandidates(code)` which returns the
+exact-case id plus, for the `word-XXXX` shape, the canonical newCode casing (lowercase word +
+uppercase suffix) as a fallback so a user who types the wrong case still matches. `restoreProfile()`
+now loops over those candidates. (Firestore can't do a case-insensitive doc lookup, hence the
+candidate list rather than a query.)
+
+**Favouriting a song no longer moves it.** Two compounding causes on the personal page's
+"Date added" sort. (1) Write side: `writeEntry` stamped `addedAt = serverTimestamp()` onto any
+entry lacking one, so the *first* edit of a legacy entry (e.g. tapping the star) pinned it to
+"now" and jumped it to the top permanently. It now only stamps `addedAt` for a genuinely new
+entry (`!prev`) and otherwise preserves the existing value; a legacy entry is left un-stamped.
+(2) Read side: `entAddedAt` fell back to `updatedAt` when `addedAt` was missing, and `updatedAt`
+is bumped on every edit — so starring a legacy entry moved it. It no longer looks at `updatedAt`:
+resolved `addedAt` wins; a pending (just-written) `addedAt` is treated as "now" so new entries
+still settle at the top; a legacy entry with no `addedAt` falls back to the song's stable
+`sortKey`, which starring can't change.
+
+**Personal-page filters restyled to match home.** The personal page showed all genre chips and
+the "Starred only" chip inline with no toggle. Now mirrors the home layout: a `ctlbar` row with a
+`filtertog` button (id `ufiltertog`, state `uFiltersOpen`, reset on person-switch) carrying a
+count badge (`fcount` = included + excluded genres + starred-only), the sortbar beside it, the
+genre chips and "Starred only" chip moved into a collapsible `filterpanel` (id `ufilterpanel`),
+and a "showing X songs · ..." summary line with an inline **Clear**. Reuses the existing home
+CSS (`.ctlbar`/`.filtertog`/`.filterpanel`/`.fcount`), so no style.css change. `data-uclear` and
+`data-ustaronly` handlers unchanged.
