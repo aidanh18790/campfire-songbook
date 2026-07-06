@@ -460,3 +460,54 @@ genre chips and "Starred only" chip moved into a collapsible `filterpanel` (id `
 and a "showing X songs · ..." summary line with an inline **Clear**. Reuses the existing home
 CSS (`.ctlbar`/`.filtertog`/`.filterpanel`/`.fcount`), so no style.css change. `data-uclear` and
 `data-ustaronly` handlers unchanged.
+
+## 23. Scales section — fretboard maps (campfire-v31)
+
+New standalone **Scales** tab: interactive guitar-fretboard diagrams for the five scales that
+cover most of what this group plays. Fully data-driven and self-contained — no images, no new
+deps, just generated SVG, so it adds little weight to `app.js`.
+
+**Nav / routing.** A fifth nav button (staircase icon, label "Scales") sits before "You" in
+`chrome()`. Route added in `route()` (`#scales` -> `{view:"scales"}`) and dispatched in `render()`
+to `renderScales()`. Navigation rides the existing generic `data-go` handler — no special-casing.
+
+**Scale data.** `SCALES` maps a key -> `{name, iv, deg}` where `iv` is semitone intervals from the
+root and `deg` is the matching scale-degree labels. Included: minor pentatonic, major pentatonic,
+blues, major, natural minor. (Pentatonic minor/major share a shape family; blues is minor
+pentatonic + the b5. Deliberately left out harmonic/melodic minor and the modes — high diagram
+count, low real-world use for this group, same low-adoption trap as the difficulty ratings.)
+`SC_NOTES` is the chromatic scale (sharps only — standard for guitar diagrams, avoids
+enharmonic-spelling complexity). `SC_OPEN` = open-string pitch classes top->bottom `e B G D A E`.
+
+**Helpers.** `scPcs()` -> the scale's pitch-class set for the current root/type. `scDeg(pc)` ->
+degree label for a pitch class. `scAnchors()` -> the low-E-string frets (0..12) that land on a
+scale tone; these are the "positions" for box view (anchoring positions to root/scale tones on
+the 6th string matches the standard root-anchored practice approach).
+
+**Renderer.** `fretboardSVG(fromFret,toFret)` builds one SVG. `fromFret===0` = full-neck view
+(shows open notes left of the nut, thick nut line); `fromFret>0` = box/window view (no open
+column, leftmost fret line is thin). Geometry is pixel-based (fw=34, nutX=66, etc.), viewBox
+sized to content, wrapped in `.fretwrap` (`overflow-x:auto`) so a wide neck stays legible and
+scrolls on narrow phones instead of shrinking. Roots render orange (`#ff7e3d`) with a cream ring;
+other scale notes render parchment (`#cdb794`); dark text on both. Colours are hardcoded warm hex
+(the app has no light mode, so no theming needed). Note circles show either note names or scale
+degrees depending on `scaleLabels`.
+
+**State + controls (all in the global click dispatcher).** `scaleRoot` (default "A"),
+`scaleType` ("minPent"), `scaleView` ("neck"|"box"), `scaleLabels` ("notes"|"degrees"),
+`scalePos` (index into `scAnchors()`). Root and Scale are `.chip` rows (reuse home chip styling).
+Two `.seg` segmented toggles cover Full neck / One box and Notes / Degrees. In box view a
+`.scpos` stepper (`data-scpos` prev/next, disabled at ends) walks the positions and shows the
+fret range. Handlers: `data-scroot`, `data-sctype` (both reset `scalePos=0`), `data-scview`,
+`data-sclabels`, `data-scpos`.
+
+**Scroll preservation.** `renderScales()` follows the established `_scrollX` capture/restore
+pattern for its horizontal bars — ids `scroot`, `sctype`, `fretscroll` — with the synchronous
+`void el.scrollWidth` layout read before reassigning `scrollLeft`. Vertical scroll uses
+`keepScroll("scales")`.
+
+**Files touched:** `app.js` (block + wiring), `style.css` (Scales section rules appended),
+`sw.js` (cache bump v30 -> **v31**). `index.html` unchanged.
+
+**Deferred (didn't build, on purpose):** linking a scale to a song by key. Chosen scope this pass
+was a standalone section; the song-linked version is the natural follow-up once songs carry a key.

@@ -354,6 +354,7 @@ function route(){
   if(parts[0]==="song") return {view:"song",id:parts[1]};
   if(parts[0]==="people") return {view:"people"};
   if(parts[0]==="spin") return {view:"spin"};
+  if(parts[0]==="scales") return {view:"scales"};
   if(parts[0]==="me") return {view:"user",uid:me?me.uid:null};
   if(parts[0]==="user") return {view:"user",uid:parts[1]};
   return {view:"home"};
@@ -377,6 +378,7 @@ function chrome(inner,active){
     <button data-go="/" class="${active==='home'?'on':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 10l8-6 8 6v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Songs</button>
     <button data-go="/people" class="${active==='people'?'on':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 6.5a3 3 0 0 1 0 6M17 14c2.5.4 4 2.3 4 5"/></svg>People</button>
     <button data-go="/spin" class="${active==='spin'?'on':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 12l5-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>Spin</button>
+    <button data-go="/scales" class="${active==='scales'?'on':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h4v-4h4v-4h4v-4h4v-4"/></svg>Scales</button>
     <button data-go="/me" class="${active==='user'?'on':''}"><span style="margin-bottom:1px">${avatar(me.name,me.color,22)}</span>You</button>
   </nav>`;
 }
@@ -849,6 +851,93 @@ function renderSpin(){
   };
 }
 
+/* ============================================================
+   SCALES — data-driven fretboard maps (any scale, any key)
+   ============================================================ */
+const SC_NOTES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const SC_OPEN=[4,11,7,2,9,4];   // open-string pitch classes, top->bottom: e B G D A E
+const SCALES={
+  minPent: {name:"Minor pentatonic", iv:[0,3,5,7,10],      deg:["R","\u266d3","4","5","\u266d7"]},
+  majPent: {name:"Major pentatonic", iv:[0,2,4,7,9],       deg:["R","2","3","5","6"]},
+  blues:   {name:"Blues",            iv:[0,3,5,6,7,10],     deg:["R","\u266d3","4","\u266d5","5","\u266d7"]},
+  major:   {name:"Major",            iv:[0,2,4,5,7,9,11],   deg:["R","2","3","4","5","6","7"]},
+  natMinor:{name:"Natural minor",    iv:[0,2,3,5,7,8,10],   deg:["R","2","\u266d3","4","5","\u266d6","\u266d7"]},
+};
+let scaleRoot="A", scaleType="minPent", scaleView="neck", scaleLabels="notes", scalePos=0;
+
+function scPcs(){ const r=SC_NOTES.indexOf(scaleRoot); return SCALES[scaleType].iv.map(i=>(r+i)%12); }
+function scDeg(pc){ const p=scPcs(), i=p.indexOf(pc); return i<0?"":SCALES[scaleType].deg[i]; }
+// Position anchors: frets on the low-E string (0..12) that land on a scale tone.
+function scAnchors(){ const p=scPcs(), out=[]; for(let f=0;f<=12;f++){ if(p.includes((SC_OPEN[5]+f)%12)) out.push(f); } return out; }
+
+function fretboardSVG(fromFret,toFret){
+  const rootPc=SC_NOTES.indexOf(scaleRoot), pcs=scPcs();
+  const showOpen=fromFret===0;
+  const fw=34, nutX=66, openX=44, topY=18, sp=24, r=10;
+  const nSpaces=toFret-fromFret;
+  const lineX=k=>nutX+(k-fromFret)*fw;
+  const noteX=f=>f===0?openX:nutX+(f-fromFret-0.5)*fw;
+  const ys=[0,1,2,3,4,5].map(i=>topY+i*sp);
+  const botY=ys[5], numY=botY+22, W=nutX+nSpaces*fw+18, H=numY+8;
+  const midY=(ys[2]+ys[3])/2, boardX=showOpen?openX-16:nutX-8;
+  let s=`<svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:none" role="img" aria-label="${esc(scaleRoot)} ${esc(SCALES[scaleType].name)} scale on the fretboard">`;
+  s+=`<rect x="${boardX}" y="${topY-9}" width="${W-boardX-4}" height="${botY-topY+18}" rx="10" fill="#1d130b" stroke="rgba(246,236,219,0.10)"/>`;
+  for(let i=0;i<6;i++){ const sw=(0.8+i*0.18).toFixed(2); s+=`<line x1="${showOpen?openX:nutX}" y1="${ys[i]}" x2="${lineX(toFret)}" y2="${ys[i]}" stroke="rgba(246,236,219,0.42)" stroke-width="${sw}"/>`; }
+  for(let k=fromFret;k<=toFret;k++){ const nut=(k===0); s+=`<line x1="${lineX(k)}" y1="${ys[0]}" x2="${lineX(k)}" y2="${ys[5]}" stroke="${nut?'rgba(246,236,219,0.70)':'rgba(246,236,219,0.20)'}" stroke-width="${nut?4:1}"/>`; }
+  [3,5,7,9,12,15].forEach(f=>{ if(f>fromFret&&f<=toFret){ if(f===12){ s+=`<circle cx="${noteX(f)}" cy="${(ys[1]+ys[2])/2}" r="3.5" fill="rgba(246,236,219,0.16)"/><circle cx="${noteX(f)}" cy="${(ys[3]+ys[4])/2}" r="3.5" fill="rgba(246,236,219,0.16)"/>`; } else { s+=`<circle cx="${noteX(f)}" cy="${midY}" r="3.5" fill="rgba(246,236,219,0.16)"/>`; } } });
+  const names=["e","B","G","D","A","E"];
+  for(let i=0;i<6;i++){ s+=`<text x="10" y="${ys[i]+4}" font-size="11" font-weight="600" fill="rgba(246,236,219,0.5)">${names[i]}</text>`; }
+  [0,3,5,7,9,12,15].forEach(f=>{ if(f>=fromFret&&f<=toFret&&(f>0||showOpen)){ s+=`<text x="${noteX(f)}" y="${numY}" text-anchor="middle" font-size="11" fill="rgba(246,236,219,0.42)">${f}</text>`; } });
+  for(let st=0;st<6;st++){
+    for(let f=(showOpen?0:fromFret);f<=toFret;f++){
+      if(!showOpen&&f===0) continue;
+      const pc=(SC_OPEN[st]+f)%12;
+      if(!pcs.includes(pc)) continue;
+      const isRoot=pc===rootPc, label=scaleLabels==="notes"?SC_NOTES[pc]:scDeg(pc);
+      const cx=noteX(f), cy=ys[st], fill=isRoot?"#ff7e3d":"#cdb794", tcol=isRoot?"#2a1206":"#241a0c";
+      s+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}"${isRoot?' stroke="#f6ecdb" stroke-width="1.4"':''}/>`;
+      s+=`<text x="${cx}" y="${cy+3.4}" text-anchor="middle" font-size="${label.length>2?9:10.5}" font-weight="700" fill="${tcol}">${label}</text>`;
+    }
+  }
+  return s+`</svg>`;
+}
+
+function renderScales(){
+  const _scrollSX={}; ["scroot","sctype","fretscroll"].forEach(k=>{const el=$(k);if(el)_scrollSX[k]=el.scrollLeft;});
+  const rootChips=SC_NOTES.map(n=>`<button class="chip ${n===scaleRoot?'on':''}" data-scroot="${n}">${n}</button>`).join("");
+  const typeChips=Object.keys(SCALES).map(k=>`<button class="chip ${k===scaleType?'on':''}" data-sctype="${k}">${SCALES[k].name}</button>`).join("");
+  const anchors=scAnchors(); if(scalePos>anchors.length-1) scalePos=0;
+  let board, posBar="";
+  if(scaleView==="box"){
+    const a=anchors[scalePos]||0, from=Math.max(0,Math.min(11,a-1)), to=from+4;
+    board=fretboardSVG(from,to);
+    posBar=`<div class="scpos">
+      <button data-scpos="prev" ${scalePos<=0?"disabled":""} aria-label="previous position">\u2039</button>
+      <div class="scpos-lbl">Position ${scalePos+1} of ${anchors.length}<span class="scpos-sub">frets ${from}\u2013${to}</span></div>
+      <button data-scpos="next" ${scalePos>=anchors.length-1?"disabled":""} aria-label="next position">\u203a</button>
+    </div>`;
+  } else {
+    board=fretboardSVG(0,12);
+  }
+  const inner=`
+    <div class="ptitle">Scales</div>
+    <div class="psub">Fretboard maps for the scales worth knowing. Orange notes are the root \u2014 anchor everything to them.</div>
+    <div class="scctl"><div class="scctl-label">Root</div><div class="filters scscroll" id="scroot">${rootChips}</div></div>
+    <div class="scctl"><div class="scctl-label">Scale</div><div class="filters scscroll" id="sctype">${typeChips}</div></div>
+    <div class="sctoggles">
+      <div class="seg"><button class="${scaleView==="neck"?"on":""}" data-scview="neck">Full neck</button><button class="${scaleView==="box"?"on":""}" data-scview="box">One box</button></div>
+      <div class="seg"><button class="${scaleLabels==="notes"?"on":""}" data-sclabels="notes">Notes</button><button class="${scaleLabels==="degrees"?"on":""}" data-sclabels="degrees">Degrees</button></div>
+    </div>
+    ${posBar}
+    <div class="fretwrap" id="fretscroll">${board}</div>
+    <div class="sclegend"><span><i style="background:#ff7e3d"></i>Root (${scaleRoot})</span><span><i style="background:#cdb794"></i>Scale note</span></div>
+    <div class="section sctip"><h3>How to actually learn it</h3><div class="sctip-body">Don\u2019t run it up and down on autopilot \u2014 that builds finger speed but no musical instinct. Loop a chord or a single drone note in ${scaleRoot} and play the scale over it, landing on the orange roots and letting the other notes pass through. Get one position comfortable, then connect it to the next, two at a time, until the whole neck joins up.</div></div>
+  `;
+  root.innerHTML=chrome(inner,"scales");
+  Object.keys(_scrollSX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollSX[k];}});
+  keepScroll("scales");
+}
+
 function render(){
   const r=route();
   if(r.view!=="song" && detachNotes){ detachNotes(); detachNotes=null; notesSongId=null; currentNotes=[]; }
@@ -857,6 +946,7 @@ function render(){
   else if(r.view==="song") renderSong(r.id);
   else if(r.view==="people") renderPeople();
   else if(r.view==="spin") renderSpin();
+  else if(r.view==="scales") renderScales();
   else if(r.view==="user") renderUser(r.uid);
   else renderHome();
 }
@@ -900,6 +990,11 @@ document.addEventListener("click",e=>{
     if(uSort===m){ uSortDir=uSortDir==="desc"?"asc":"desc"; } else { uSort=m; uSortDir="desc"; }
     render(); return; }
   const uso=e.target.closest("[data-ustaronly]"); if(uso){ uStarOnly=!uStarOnly; render(); return; }
+  const scr=e.target.closest("[data-scroot]"); if(scr){ scaleRoot=scr.getAttribute("data-scroot"); scalePos=0; render(); return; }
+  const sct=e.target.closest("[data-sctype]"); if(sct){ scaleType=sct.getAttribute("data-sctype"); scalePos=0; render(); return; }
+  const scv=e.target.closest("[data-scview]"); if(scv){ scaleView=scv.getAttribute("data-scview"); render(); return; }
+  const scl=e.target.closest("[data-sclabels]"); if(scl){ scaleLabels=scl.getAttribute("data-sclabels"); render(); return; }
+  const scp=e.target.closest("[data-scpos]"); if(scp){ const an=scAnchors(); const d=scp.getAttribute("data-scpos")==="next"?1:-1; scalePos=Math.max(0,Math.min(an.length-1,scalePos+d)); render(); return; }
   const ucl=e.target.closest("[data-uclear]"); if(ucl){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uStarOnly=false; render(); return; }
   const sb=e.target.closest("[data-sort]"); if(sb){ const m=sb.getAttribute("data-sort");
     if(sortMode===m){ sortDir=sortDir==="desc"?"asc":"desc"; } else { sortMode=m; sortDir="desc"; }
