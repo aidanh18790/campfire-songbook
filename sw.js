@@ -2,7 +2,7 @@
    Caches the app shell, fonts, and Firebase SDK so the page opens with no
    signal after the first visit. Live database AND auth endpoints are left
    alone so sign-in and sync work normally. */
-const CACHE = "campfire-v31";
+const CACHE = "campfire-v32";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./style.css", "./app.js"];
 
 self.addEventListener("install", e => {

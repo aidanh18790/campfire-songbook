@@ -349,3 +349,31 @@
   .sclegend i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px;}
   .sctip{margin-top:16px;}
   .sctip-body{color:var(--muted);font-size:14px;line-height:1.6;}
+
+  /* .shell wraps topbar + scrolling content so a nav rail can sit beside it in landscape */
+  .shell{flex:1;min-height:0;display:flex;flex-direction:column;width:100%;}
+
+  /* ---- Phone landscape: nav rail on the side, full-bleed bg, compact scales ---- */
+  @media (orientation:landscape) and (max-height:600px){
+    #root{flex-direction:row;}
+    .shell{min-width:0;height:100%;}
+    .nav{order:-1;flex-direction:column;width:64px;height:100%;max-width:none;margin:0;
+      border-top:none;border-right:1px solid var(--line);background:rgba(20,14,9,.60);
+      justify-content:center;gap:20px;
+      padding:calc(10px + env(safe-area-inset-top)) 0 calc(10px + env(safe-area-inset-bottom))
+              env(safe-area-inset-left);}
+    .nav button{flex:0 0 auto;font-size:10px;gap:3px;padding:4px 2px;}
+    .topbar{padding:calc(10px + env(safe-area-inset-top)) 18px 4px;}
+    /* general de-clutter: smaller heading, drop the long subtitle line */
+    .ptitle{font-size:23px;margin-top:8px;}
+    .psub{display:none;}
+    .wrap{padding-bottom:14px;}
+    /* keep the fab clear of the rail on the home page */
+    .fab{left:calc(50% + 32px);}
+    /* scales page: give the fretboard the room, trim the surrounding chrome */
+    .scctl{margin-top:6px;}
+    .sctoggles{margin-top:8px;}
+    .scpos{margin-top:10px;}
+    .fretwrap{margin-top:12px;}
+    .sctip{display:none;}
+  }

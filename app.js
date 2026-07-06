@@ -369,11 +369,13 @@ window.addEventListener("offline",()=>{online=false;render();});
    ============================================================ */
 function chrome(inner,active){
   return `
+  <div class="shell">
   <div class="topbar">
     <div class="brand" data-go="/">${FLAME}<span class="name">Songbook</span></div>
     <div class="me"><span class="conn ${online?'live':''}" title="${online?'Online':'Offline'}"></span>${avatar(me.name,me.color,30)}</div>
   </div>
   <div class="wrap">${inner}</div>
+  </div>
   <nav class="nav">
     <button data-go="/" class="${active==='home'?'on':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 10l8-6 8 6v9a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>Songs</button>
     <button data-go="/people" class="${active==='people'?'on':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 6.5a3 3 0 0 1 0 6M17 14c2.5.4 4 2.3 4 5"/></svg>People</button>

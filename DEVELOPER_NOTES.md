@@ -511,3 +511,31 @@ pattern for its horizontal bars — ids `scroot`, `sctype`, `fretscroll` — wit
 
 **Deferred (didn't build, on purpose):** linking a scale to a song by key. Chosen scope this pass
 was a standalone section; the song-linked version is the natural follow-up once songs carry a key.
+
+## 24. Phone-landscape layout: side nav rail + compact Scales (campfire-v32)
+
+Landscape was never actually handled — the `.rotate-lock` div in `index.html` has no CSS and no
+JS toggling it, so it's inert; the app simply stretched the portrait layout sideways. In landscape
+that meant an opaque, centred (max-width 680) bottom nav bar banding the background, and the tall
+Scales control stack cramped into a short viewport.
+
+**Structural tweak.** `chrome()` now wraps the topbar + `.wrap` in a `.shell` div, so in landscape
+the nav can become a sibling *rail* beside the content column instead of a bar beneath it.
+`.shell{flex:1;min-height:0;display:flex;flex-direction:column}` — behaves identically in portrait
+(it's just the old #root column, one level down). `document.querySelector(".wrap")` and all
+`.wrap`/`.topbar`/`.nav` selectors are unaffected (still descendants).
+
+**Landscape media query** `@media (orientation:landscape) and (max-height:600px)` (phones only —
+excludes tablets/desktop):
+- `#root` flips to `row`; `.nav` gets `order:-1`, becomes a 64px full-height left rail with a
+  right border, semi-transparent bg (`.60` so the ember gradient shows through — fixes the
+  "background cuts off" banding), vertical button stack, and left safe-area padding for the notch.
+- General de-clutter: `.ptitle` shrinks to 23px, `.psub` hidden, `.wrap` bottom padding trimmed,
+  `.fab` nudged right so it clears the rail on the home page.
+- Scales-specific: tighter top margins on `.scctl`/`.sctoggles`/`.scpos`/`.fretwrap`, and `.sctip`
+  hidden (the practice prose still shows in portrait — landscape is the focused "look at the neck"
+  mode). The fretboard already scrolls horizontally via `.fretwrap`, so it uses the extra width.
+
+**Files touched:** `app.js` (chrome `.shell` wrap), `style.css` (`.shell` + landscape query),
+`sw.js` (cache **v31 -> v32**). `index.html` unchanged — the inert `.rotate-lock` markup was left
+as-is (harmless; can be removed later if we want).
