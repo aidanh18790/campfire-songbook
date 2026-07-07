@@ -979,13 +979,12 @@ function pracShowBeat(beat){
 }
 function pracShowBar(bar){
   if(!pracEls) return;
-  const prog=pracProg();
-  if(bar===0){ pracEls.chord.textContent="Ready"; pracEls.target.textContent="count in\u2026"; pracEls.prog.forEach(c=>c.classList.remove("on")); return; }
-  const idx=(bar-1)%prog.length, ch=prog[idx], third=SC_NOTES[(ch.pc+4)%12];
-  pracEls.chord.textContent=ch.name;
-  pracEls.target.innerHTML=`aim for the 3rd \u00b7 <b>${third}</b>`;
-  pracEls.prog.forEach((c,i)=>c.classList.toggle("on",i===idx));
-  if(pracEls.fret) pracEls.fret.innerHTML=breakBoardSVG(SC_NOTES.indexOf(breakKey), ch.pc);
+  const prog=pracProg(), len=prog.length, kp=SC_NOTES.indexOf(breakKey);
+  const nextIdx=bar%len, nextCh=prog[nextIdx], aimPc=(nextCh.pc+4)%12;
+  if(bar===0){ if(pracEls.chord) pracEls.chord.textContent="\u2013"; pracEls.prog.forEach((c,i)=>{ c.classList.remove("on"); c.classList.toggle("aim",i===nextIdx); }); if(pracEls.fret) pracEls.fret.innerHTML=breakBoardSVG(kp,nextCh.pc,aimPc); }
+  else { const curIdx=(bar-1)%len, curCh=prog[curIdx]; if(pracEls.chord) pracEls.chord.textContent=curCh.name; pracEls.prog.forEach((c,i)=>{ c.classList.toggle("on",i===curIdx); c.classList.toggle("aim",i===nextIdx&&i!==curIdx); }); if(pracEls.fret) pracEls.fret.innerHTML=breakBoardSVG(kp,curCh.pc,aimPc); }
+  if(pracEls.aim) pracEls.aim.textContent=SC_NOTES[aimPc];
+  if(pracEls.target) pracEls.target.innerHTML=`the 3rd of <b>${nextCh.name}</b> \u2014 land on the next \u201c1\u201d`;
 }
 function pracStart(){
   if(pracPlaying) return;
@@ -1004,7 +1003,7 @@ function pracStop(){
   if(pracRAF){ cancelAnimationFrame(pracRAF); pracRAF=0; }
   if(pracMaster&&pracCtx){ const n=pracCtx.currentTime; pracMaster.gain.cancelScheduledValues(n); pracMaster.gain.setValueAtTime(pracMaster.gain.value,n); pracMaster.gain.linearRampToValueAtTime(0,n+0.06); }
   const btn=$("pracBtn"); if(btn){ btn.textContent="Start"; btn.classList.remove("on"); }
-  if(pracEls){ pracEls.dots.forEach(d=>d.classList.remove("on","acc")); if(pracEls.chord)pracEls.chord.textContent="Ready"; if(pracEls.target)pracEls.target.textContent="press start"; pracEls.prog.forEach(c=>c.classList.remove("on")); }
+  if(pracEls){ pracEls.dots.forEach(d=>d.classList.remove("on","acc")); if(pracEls.chord)pracEls.chord.textContent="–"; if(pracEls.aim)pracEls.aim.textContent="▸"; if(pracEls.target)pracEls.target.textContent="press start"; pracEls.prog.forEach(c=>c.classList.remove("on","aim")); }
 }
 function pracBind(){
   const btn=$("pracBtn"); if(btn) btn.onclick=()=>{ pracPlaying?pracStop():pracStart(); };
@@ -1012,7 +1011,7 @@ function pracBind(){
   const back=$("pracBack"); if(back) back.onclick=()=>{ pracBacking=!pracBacking; back.classList.toggle("on",pracBacking); back.textContent="Backing: "+(pracBacking?"on":"off"); };
   if(pracPlaying){
     if(btn){ btn.textContent="Stop"; btn.classList.add("on"); }
-    pracEls={ dots:[...document.querySelectorAll("#pracBeats .pdot")], chord:$("pracChord"), target:$("pracTarget"), prog:[...document.querySelectorAll("#pracProg .pcell")], fret:$("pracFret") };
+    pracEls={ dots:[...document.querySelectorAll("#pracBeats .pdot")], chord:$("pracChord"), aim:$("pracAim"), target:$("pracTarget"), prog:[...document.querySelectorAll("#pracProg .pcell")], fret:$("pracFret") };
   }
 }
 
@@ -1023,23 +1022,32 @@ function renderPlayInner(){
   const progCells=prog.map((c,i)=>`<div class="pcell">${c.name}<span>${roman[i]}</span></div>`).join("");
   const dots=[0,1,2,3].map(()=>`<i class="pdot"></i>`).join("");
   return `
-    <div class="psub">Play along with the changes. As each chord comes around, land your run on the highlighted target \u2014 the metronome and backing keep your timing honest.</div>
+    <div class="psub">Play along with the changes \u2014 you\u2019re always aiming one chord ahead. Land on the cyan target (the next chord\u2019s 3rd) right as the change hits.</div>
     <div class="scctl"><div class="scctl-label">Key</div><div class="filters scscroll" id="bkey" style="flex-wrap:wrap">${keyChips}</div></div>
     <div class="pracpanel">
-      <div class="pracnow"><div class="pracchord" id="pracChord">Ready</div><div class="practarget" id="pracTarget">press start</div></div>
+      <div class="pracnow">
+        <div class="pracover">now over <b id="pracChord">\u2013</b></div>
+        <div class="pracaim" id="pracAim">\u25b8</div>
+        <div class="pracaimsub" id="pracTarget">press start \u2014 aim to land on the next chord\u2019s 3rd</div>
+      </div>
       <div class="pbeats" id="pracBeats">${dots}</div>
       <div class="pprog" id="pracProg">${progCells}</div>
-      <div class="fretwrap" id="pracFret">${breakBoardSVG(kp, prog[0].pc)}</div>
+      <div class="fretwrap" id="pracFret">${breakBoardSVG(kp, prog[0].pc, (prog[1].pc+4)%12)}</div>
+      <div class="sclegend praclegend">
+        <span><i style="background:#ff6b3d"></i>land on the 1</span>
+        <span><i style="background:#4db8e8"></i>aim: next 3rd</span>
+        <span><i style="background:#c9bba2"></i>connect between</span>
+      </div>
       <div class="praccontrols">
         <button class="pracbtn" id="pracBtn">Start</button>
         <div class="practempo"><label>Tempo <b id="pracBpm">${pracTempo}</b> bpm</label><input type="range" id="pracTempo" min="50" max="150" step="2" value="${pracTempo}"></div>
         <button class="pracback ${pracBacking?'on':''}" id="pracBack">Backing: ${pracBacking?'on':'off'}</button>
       </div>
-      <div class="prachint">Start slow. Loop it until you can land on the target every time, then nudge the tempo up. One chord per bar, four beats each: I \u2013 IV \u2013 V \u2013 I.</div>
+      <div class="prachint">Land on the bright note on the \u201c1\u201d of each bar; wander the faint scale notes in between; steer toward the cyan note \u2014 the next chord\u2019s 3rd \u2014 to land on the change. Start slow, then nudge the tempo up.</div>
     </div>`;
 }
 
-function breakBoardSVG(keyPc, chordPc){
+function breakBoardSVG(keyPc, chordPc, aimPc){
   const pal=[0,2,4,7,9].map(i=>(keyPc+i)%12);            // major pentatonic palette
   const R=chordPc, T=(chordPc+4)%12, F=(chordPc+7)%12;   // chord root, major 3rd, 5th
   const OPEN=[4,11,7,2,9,4];
@@ -1060,10 +1068,12 @@ function breakBoardSVG(keyPc, chordPc){
     for(let f=0;f<=toFret;f++){
       const pc=(OPEN[st]+f)%12;
       let role=null;
-      if(pc===T) role="3"; else if(pc===R) role="R"; else if(pc===F) role="5"; else if(pal.includes(pc)) role="pass";
+      if(aimPc!=null && pc===aimPc) role="aim";
+      else if(pc===T) role="3"; else if(pc===R) role="R"; else if(pc===F) role="5"; else if(pal.includes(pc)) role="pass";
       if(!role) continue;
       const cx=noteX(f), cy=ys[st];
       if(role==="pass"){ s+=`<circle cx="${cx}" cy="${cy}" r="5.5" fill="#c9bba2" opacity="0.5"/>`; continue; }
+      if(role==="aim"){ s+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#4db8e8" stroke="#eaf6fc" stroke-width="1.7"/>`; s+=`<text x="${cx}" y="${cy+3.4}" text-anchor="middle" font-size="11" font-weight="700" fill="#06242f">3</text>`; continue; }
       const fill = role==="3"?"#ff6b3d" : role==="R"?"#e0a23e" : "#2fa98c";
       s+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}"${role==="3"?' stroke="#f6ecdb" stroke-width="1.6"':''}/>`;
       s+=`<text x="${cx}" y="${cy+3.4}" text-anchor="middle" font-size="11" font-weight="700" fill="#2a1206">${role}</text>`;

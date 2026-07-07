@@ -633,3 +633,30 @@ on mode switch (`data-scmode`), key change (`data-bkey`), and — via a guard at
 
 **Deferred:** real strummed backing (samples), selectable/longer progressions, per-key G-run tabs,
 a "target hit" listener via mic. Current backing is synth pad + click, intentionally simple.
+
+## 28. Play trainer: aim one chord ahead + clearer roles (campfire-v36)
+
+Feedback: "aim for the 3rd" was ambiguous about *when*, and the app showed the current chord's
+target as the chord arrived — too late to aim for. Fixed by making the whole trainer look one chord
+ahead (you steer toward the next landing during the current bar), and by naming the note roles.
+
+- `breakBoardSVG(keyPc, chordPc, aimPc)` gained an optional third arg. When set, every position of
+  `aimPc` is drawn in a distinct cyan (#4db8e8, ringed, labelled "3") with top priority over the
+  current chord tones and palette. Called with 2 args elsewhere (Breaks static mode) => unchanged.
+- `pracShowBar(bar)` rewritten to aim-ahead: `nextIdx = bar % len` is the chord at the *upcoming*
+  downbeat; `aimPc` = its major 3rd. The big readout (`.pracaim`, cyan) shows that next target note;
+  a small line shows the chord currently sounding; the progression strip marks the current bar
+  (ember `.on`) and the next bar (cyan `.aim`); the fretboard shows current chord tones PLUS the
+  cyan aim note. During count-in it already points at the first chord's 3rd so you land on bar 1.
+- `renderPlayInner` readout restructured to now-over / big-aim / sub, and the legend rewritten to
+  teach the model in three chips: bright = land on the 1, cyan = aim (next 3rd), faint = connect
+  between. Hint text spells out land-on-1 / wander-scale / steer-to-next.
+- `pracEls` gained `aim`; `pracStop` resets the new elements.
+
+Musical model this encodes (for future reference): one key scale over the whole I-IV-V (major
+pentatonic has no wrong notes); the chord tones are the subset you *land on* on strong beats
+(the 3rd is the strongest, it spells the chord); everything else in the scale is a connector used
+on weak beats; you approach the next chord's tone near the end of each bar. Land on beat 1.
+
+**Files:** `app.js` (breakBoardSVG aim arg, pracShowBar, renderPlayInner, pracBind/pracStop),
+`style.css` (aim readout + `.pcell.aim`), `sw.js` (cache **v35 -> v36**). `index.html` unchanged.
