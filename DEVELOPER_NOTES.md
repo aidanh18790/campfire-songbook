@@ -539,3 +539,61 @@ excludes tablets/desktop):
 **Files touched:** `app.js` (chrome `.shell` wrap), `style.css` (`.shell` + landscape query),
 `sw.js` (cache **v31 -> v32**). `index.html` unchanged — the inert `.rotate-lock` markup was left
 as-is (harmless; can be removed later if we want).
+
+## 25. Landscape fix: scale controls weren't tappable (campfire-v33)
+
+The v32 landscape rail broke tapping on the Scales control chips (root/scale selectors). Cause was
+a stacking + hit-test problem, not a visual one: the base `.nav` is `z-index:24`, fine as a bottom
+bar, but as a full-height left *rail* that high layer plus `.shell{width:100%}` (which can let the
+content column underlap the rail in a flex row) let the nav's layer intercept touches over the
+control area. The nested horizontal chip scrollers made it worse (tap read as drag).
+
+Fixes (style.css only, no JS/HTML change):
+- `.shell` no longer sets `width:100%` (redundant with `flex:1`, and harmful in the landscape row);
+  added `min-width:0` so it sizes to the remaining track cleanly.
+- Landscape `.nav` gets `z-index:1` — below the content layers (`.wrap` 2, `.topbar` 3) — so the
+  rail can never sit on top of the controls for hit-testing. It doesn't overlap them visually
+  either, so nothing changes on screen; this is purely a hit-test guard.
+- Landscape control rows (`.scctl`/`.scscroll`) now `flex-wrap:wrap` with `overflow-x:visible`
+  instead of horizontal-scrolling, removing the nested scrollers (which also declutters — the 12
+  root chips fit without a swipe).
+- Added `touch-action:manipulation` to `.chip`, `.seg button`, `.scpos button`, `.nav button`,
+  `.sbtn` so taps register immediately and aren't consumed by scroll/zoom gesture detection.
+
+`sw.js` cache **v32 -> v33**. If it still misreads a tap on a specific device, next step is to
+check for an iOS `-webkit-overflow-scrolling` layer issue on `.wrap`.
+
+## 26. Bluegrass: two scales + a Breaks mode inside Scales (campfire-v34)
+
+Added the two scales bluegrass lead actually uses, plus a "Breaks" helper mode in the Scales tab.
+
+**Two new scales** (just data in `SCALES`, the renderer handles them):
+- `bluegrass` = major pentatonic + a chromatic b3 (1,2,b3,3,5,6) — the "major blues" scale; the
+  b3-into-3 slide is the signature bluegrass/country lead sound.
+- `mixolydian` = major with a b7 (1,2,3,4,5,6,b7) — the modal-tune sound (Old Joe Clark etc.).
+
+**Breaks mode.** A `Scales | Breaks` segmented toggle sits under the title (state `scaleMode`,
+default `scales`, so nothing changes on load). Breaks mode (`renderBreaksInner()`):
+- Key chips limited to the open-friendly bluegrass keys G, C, D, A (`breakKey`).
+- The I-IV-V chords for the key shown as selectable pills (`breakChord`; I=+0, IV=+5, V=+7
+  semitones — all natural notes for these four keys).
+- `breakBoardSVG(keyPc, chordPc)`: full-neck map with the key's major pentatonic drawn faint
+  (the connecting palette) and the *selected chord's* tones highlighted as targets — root (amber),
+  5th (teal), and the major 3rd (ember, ringed) flagged as the note to aim for on the change. This
+  is a separate renderer from `fretboardSVG` (different colour semantics) to avoid disturbing the
+  working scale renderer.
+- The classic G run as a `<pre class="tab">` tab block, labelled as one common version, with a note
+  to capo it for other keys.
+- A six-step "build a break" ladder (melody first -> strip to key tones -> chord tones -> connect
+  with scale notes -> embellish + G run), the standard flatpicking method.
+
+Wiring: handlers `data-scmode`, `data-bkey`, `data-bchord` added to the click dispatcher.
+`renderScales` now branches on `scaleMode`; scroll-preservation list gained `bkey`. Key chips wrap
+(no horizontal scroller, consistent with the v33 landscape tap fix). New CSS: `.bkchord(s)`,
+`.bklabel`, `.tab`, `.bkrun(-sub)`, `.bksteps`. Landscape hides `.bksteps` alongside `.sctip`.
+
+**Files:** `app.js` (2 scales, state, 2 new fns + renderScales rewrite, handlers), `style.css`
+(breaks styles + landscape hide), `sw.js` (cache **v33 -> v34**). `index.html` unchanged.
+
+**Deferred:** per-key G-run tabs (currently G only + capo note); tying the break helper to a
+song's key; a play-along drone (the "more work" option not chosen this pass).

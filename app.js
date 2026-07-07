@@ -861,11 +861,14 @@ const SC_OPEN=[4,11,7,2,9,4];   // open-string pitch classes, top->bottom: e B G
 const SCALES={
   minPent: {name:"Minor pentatonic", iv:[0,3,5,7,10],      deg:["R","\u266d3","4","5","\u266d7"]},
   majPent: {name:"Major pentatonic", iv:[0,2,4,7,9],       deg:["R","2","3","5","6"]},
+  bluegrass:{name:"Bluegrass",       iv:[0,2,3,4,7,9],      deg:["R","2","\u266d3","3","5","6"]},
   blues:   {name:"Blues",            iv:[0,3,5,6,7,10],     deg:["R","\u266d3","4","\u266d5","5","\u266d7"]},
   major:   {name:"Major",            iv:[0,2,4,5,7,9,11],   deg:["R","2","3","4","5","6","7"]},
+  mixolydian:{name:"Mixolydian",     iv:[0,2,4,5,7,9,10],   deg:["R","2","3","4","5","6","\u266d7"]},
   natMinor:{name:"Natural minor",    iv:[0,2,3,5,7,8,10],   deg:["R","2","\u266d3","4","5","\u266d6","\u266d7"]},
 };
 let scaleRoot="A", scaleType="minPent", scaleView="neck", scaleLabels="notes", scalePos=0;
+let scaleMode="scales", breakKey="G", breakChord=0;
 
 function scPcs(){ const r=SC_NOTES.indexOf(scaleRoot); return SCALES[scaleType].iv.map(i=>(r+i)%12); }
 function scDeg(pc){ const p=scPcs(), i=p.indexOf(pc); return i<0?"":SCALES[scaleType].deg[i]; }
@@ -904,25 +907,98 @@ function fretboardSVG(fromFret,toFret){
   return s+`</svg>`;
 }
 
-function renderScales(){
-  const _scrollSX={}; ["scroot","sctype","fretscroll"].forEach(k=>{const el=$(k);if(el)_scrollSX[k]=el.scrollLeft;});
-  const rootChips=SC_NOTES.map(n=>`<button class="chip ${n===scaleRoot?'on':''}" data-scroot="${n}">${n}</button>`).join("");
-  const typeChips=Object.keys(SCALES).map(k=>`<button class="chip ${k===scaleType?'on':''}" data-sctype="${k}">${SCALES[k].name}</button>`).join("");
-  const anchors=scAnchors(); if(scalePos>anchors.length-1) scalePos=0;
-  let board, posBar="";
-  if(scaleView==="box"){
-    const a=anchors[scalePos]||0, from=Math.max(0,Math.min(11,a-1)), to=from+4;
-    board=fretboardSVG(from,to);
-    posBar=`<div class="scpos">
-      <button data-scpos="prev" ${scalePos<=0?"disabled":""} aria-label="previous position">\u2039</button>
-      <div class="scpos-lbl">Position ${scalePos+1} of ${anchors.length}<span class="scpos-sub">frets ${from}\u2013${to}</span></div>
-      <button data-scpos="next" ${scalePos>=anchors.length-1?"disabled":""} aria-label="next position">\u203a</button>
-    </div>`;
-  } else {
-    board=fretboardSVG(0,12);
+function breakBoardSVG(keyPc, chordPc){
+  const pal=[0,2,4,7,9].map(i=>(keyPc+i)%12);            // major pentatonic palette
+  const R=chordPc, T=(chordPc+4)%12, F=(chordPc+7)%12;   // chord root, major 3rd, 5th
+  const OPEN=[4,11,7,2,9,4];
+  const fw=34, nutX=66, openX=44, topY=18, sp=24, r=10, toFret=12;
+  const lineX=k=>nutX+k*fw;
+  const noteX=f=>f===0?openX:nutX+(f-0.5)*fw;
+  const ys=[0,1,2,3,4,5].map(i=>topY+i*sp);
+  const botY=ys[5], numY=botY+22, W=nutX+toFret*fw+18, H=numY+8, midY=(ys[2]+ys[3])/2;
+  let s=`<svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:none" role="img" aria-label="chord-tone targets over the ${SC_NOTES[keyPc]} pentatonic">`;
+  s+=`<rect x="${openX-16}" y="${topY-9}" width="${W-(openX-16)-4}" height="${botY-topY+18}" rx="10" fill="#1d130b" stroke="rgba(246,236,219,0.10)"/>`;
+  for(let i=0;i<6;i++){ const sw=(0.8+i*0.18).toFixed(2); s+=`<line x1="${openX}" y1="${ys[i]}" x2="${lineX(toFret)}" y2="${ys[i]}" stroke="rgba(246,236,219,0.42)" stroke-width="${sw}"/>`; }
+  for(let k=0;k<=toFret;k++){ const nut=(k===0); s+=`<line x1="${lineX(k)}" y1="${ys[0]}" x2="${lineX(k)}" y2="${ys[5]}" stroke="${nut?'rgba(246,236,219,0.70)':'rgba(246,236,219,0.20)'}" stroke-width="${nut?4:1}"/>`; }
+  [3,5,7,9,12].forEach(f=>{ if(f===12){ s+=`<circle cx="${noteX(f)}" cy="${(ys[1]+ys[2])/2}" r="3.5" fill="rgba(246,236,219,0.16)"/><circle cx="${noteX(f)}" cy="${(ys[3]+ys[4])/2}" r="3.5" fill="rgba(246,236,219,0.16)"/>`; } else { s+=`<circle cx="${noteX(f)}" cy="${midY}" r="3.5" fill="rgba(246,236,219,0.16)"/>`; } });
+  const names=["e","B","G","D","A","E"];
+  for(let i=0;i<6;i++){ s+=`<text x="10" y="${ys[i]+4}" font-size="11" font-weight="600" fill="rgba(246,236,219,0.5)">${names[i]}</text>`; }
+  [0,3,5,7,9,12].forEach(f=>{ s+=`<text x="${noteX(f)}" y="${numY}" text-anchor="middle" font-size="11" fill="rgba(246,236,219,0.42)">${f}</text>`; });
+  for(let st=0;st<6;st++){
+    for(let f=0;f<=toFret;f++){
+      const pc=(OPEN[st]+f)%12;
+      let role=null;
+      if(pc===T) role="3"; else if(pc===R) role="R"; else if(pc===F) role="5"; else if(pal.includes(pc)) role="pass";
+      if(!role) continue;
+      const cx=noteX(f), cy=ys[st];
+      if(role==="pass"){ s+=`<circle cx="${cx}" cy="${cy}" r="5.5" fill="#c9bba2" opacity="0.5"/>`; continue; }
+      const fill = role==="3"?"#ff6b3d" : role==="R"?"#e0a23e" : "#2fa98c";
+      s+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}"${role==="3"?' stroke="#f6ecdb" stroke-width="1.6"':''}/>`;
+      s+=`<text x="${cx}" y="${cy+3.4}" text-anchor="middle" font-size="11" font-weight="700" fill="#2a1206">${role}</text>`;
+    }
   }
-  const inner=`
-    <div class="ptitle">Scales</div>
+  return s+`</svg>`;
+}
+
+function renderBreaksInner(){
+  const keyPc=SC_NOTES.indexOf(breakKey);
+  const chords=[0,5,7].map((iv,i)=>({pc:(keyPc+iv)%12, roman:["I","IV","V"][i]}));
+  if(breakChord>2||breakChord<0) breakChord=0;
+  const sel=chords[breakChord];
+  const keyChips=["G","C","D","A"].map(k=>`<button class="chip ${k===breakKey?'on':''}" data-bkey="${k}">${k}</button>`).join("");
+  const chordPills=chords.map((c,i)=>`<button class="bkchord ${i===breakChord?'on':''}" data-bchord="${i}"><b>${SC_NOTES[c.pc]}</b><span>${c.roman}</span></button>`).join("");
+  return `
+    <div class="psub">A bluegrass break is the melody dressed up. Land on the chord tones \u2014 the 3rd nails the change \u2014 and connect them with scale notes. Pick a key and a chord to see where the targets sit.</div>
+    <div class="scctl"><div class="scctl-label">Key</div><div class="filters scscroll" id="bkey" style="flex-wrap:wrap">${keyChips}</div></div>
+    <div class="bklabel">The changes \u2014 tap a chord to target it</div>
+    <div class="bkchords">${chordPills}</div>
+    <div class="fretwrap" id="fretscroll">${breakBoardSVG(keyPc, sel.pc)}</div>
+    <div class="sclegend">
+      <span><i style="background:#e0a23e"></i>Root</span>
+      <span><i style="background:#ff6b3d"></i>3rd \u00b7 aim here</span>
+      <span><i style="background:#2fa98c"></i>5th</span>
+      <span><i style="background:#c9bba2"></i>scale</span>
+    </div>
+    <div class="section bkrun">
+      <h3>The G run \u2014 the essential closing lick</h3>
+      <div class="bkrun-sub">Bluegrass punctuation for ending a phrase. Learn it in G first; move it to other keys with a capo using the same shape. (One common version \u2014 there are many.)</div>
+      <pre class="tab">e|--------------------|
+B|--------------------|
+G|-----------------0--|
+D|--------------------|
+A|-----------0--2--3--|
+E|--3--0--------------|</pre>
+    </div>
+    <div class="section bksteps">
+      <h3>Building a break, step by step</h3>
+      <ol>
+        <li>Learn the chords and the rhythm for the tune.</li>
+        <li>Play the melody straight \u2014 a break is the melody first, not a scale.</li>
+        <li>Strip it to the key notes: the few that make the tune recognizable.</li>
+        <li>Fill the gaps with chord tones \u2014 land on R, 3 or 5 of the chord you\u2019re on.</li>
+        <li>Connect those targets with pentatonic and passing notes.</li>
+        <li>Add slides, hammer-ons, pull-offs, and a G run to finish.</li>
+      </ol>
+    </div>`;
+}
+
+function renderScales(){
+  const _scrollSX={}; ["scroot","sctype","fretscroll","bkey"].forEach(k=>{const el=$(k);if(el)_scrollSX[k]=el.scrollLeft;});
+  const modeToggle=`<div class="sctoggles" style="margin-top:10px"><div class="seg"><button class="${scaleMode==="scales"?"on":""}" data-scmode="scales">Scales</button><button class="${scaleMode==="breaks"?"on":""}" data-scmode="breaks">Breaks</button></div></div>`;
+  let body;
+  if(scaleMode==="breaks"){
+    body=renderBreaksInner();
+  } else {
+    const rootChips=SC_NOTES.map(n=>`<button class="chip ${n===scaleRoot?'on':''}" data-scroot="${n}">${n}</button>`).join("");
+    const typeChips=Object.keys(SCALES).map(k=>`<button class="chip ${k===scaleType?'on':''}" data-sctype="${k}">${SCALES[k].name}</button>`).join("");
+    const anchors=scAnchors(); if(scalePos>anchors.length-1) scalePos=0;
+    let board, posBar="";
+    if(scaleView==="box"){
+      const a=anchors[scalePos]||0, from=Math.max(0,Math.min(11,a-1)), to=from+4;
+      board=fretboardSVG(from,to);
+      posBar=`<div class="scpos"><button data-scpos="prev" ${scalePos<=0?"disabled":""} aria-label="previous position">\u2039</button><div class="scpos-lbl">Position ${scalePos+1} of ${anchors.length}<span class="scpos-sub">frets ${from}\u2013${to}</span></div><button data-scpos="next" ${scalePos>=anchors.length-1?"disabled":""} aria-label="next position">\u203a</button></div>`;
+    } else { board=fretboardSVG(0,12); }
+    body=`
     <div class="psub">Fretboard maps for the scales worth knowing. Orange notes are the root \u2014 anchor everything to them.</div>
     <div class="scctl"><div class="scctl-label">Root</div><div class="filters scscroll" id="scroot">${rootChips}</div></div>
     <div class="scctl"><div class="scctl-label">Scale</div><div class="filters scscroll" id="sctype">${typeChips}</div></div>
@@ -933,8 +1009,9 @@ function renderScales(){
     ${posBar}
     <div class="fretwrap" id="fretscroll">${board}</div>
     <div class="sclegend"><span><i style="background:#ff7e3d"></i>Root (${scaleRoot})</span><span><i style="background:#cdb794"></i>Scale note</span></div>
-    <div class="section sctip"><h3>How to actually learn it</h3><div class="sctip-body">Don\u2019t run it up and down on autopilot \u2014 that builds finger speed but no musical instinct. Loop a chord or a single drone note in ${scaleRoot} and play the scale over it, landing on the orange roots and letting the other notes pass through. Get one position comfortable, then connect it to the next, two at a time, until the whole neck joins up.</div></div>
-  `;
+    <div class="section sctip"><h3>How to actually learn it</h3><div class="sctip-body">Don\u2019t run it up and down on autopilot \u2014 that builds finger speed but no musical instinct. Loop a chord or a single drone note in ${scaleRoot} and play the scale over it, landing on the orange roots and letting the other notes pass through. Get one position comfortable, then connect it to the next, two at a time, until the whole neck joins up.</div></div>`;
+  }
+  const inner=`<div class="ptitle">Scales</div>${modeToggle}${body}`;
   root.innerHTML=chrome(inner,"scales");
   Object.keys(_scrollSX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollSX[k];}});
   keepScroll("scales");
@@ -997,6 +1074,9 @@ document.addEventListener("click",e=>{
   const scv=e.target.closest("[data-scview]"); if(scv){ scaleView=scv.getAttribute("data-scview"); render(); return; }
   const scl=e.target.closest("[data-sclabels]"); if(scl){ scaleLabels=scl.getAttribute("data-sclabels"); render(); return; }
   const scp=e.target.closest("[data-scpos]"); if(scp){ const an=scAnchors(); const d=scp.getAttribute("data-scpos")==="next"?1:-1; scalePos=Math.max(0,Math.min(an.length-1,scalePos+d)); render(); return; }
+  const scm=e.target.closest("[data-scmode]"); if(scm){ scaleMode=scm.getAttribute("data-scmode"); render(); return; }
+  const bky=e.target.closest("[data-bkey]"); if(bky){ breakKey=bky.getAttribute("data-bkey"); render(); return; }
+  const bch=e.target.closest("[data-bchord]"); if(bch){ breakChord=parseInt(bch.getAttribute("data-bchord"),10)||0; render(); return; }
   const ucl=e.target.closest("[data-uclear]"); if(ucl){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uStarOnly=false; render(); return; }
   const sb=e.target.closest("[data-sort]"); if(sb){ const m=sb.getAttribute("data-sort");
     if(sortMode===m){ sortDir=sortDir==="desc"?"asc":"desc"; } else { sortMode=m; sortDir="desc"; }
