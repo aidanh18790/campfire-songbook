@@ -907,6 +907,138 @@ function fretboardSVG(fromFret,toFret){
   return s+`</svg>`;
 }
 
+/* ============================================================
+   BLUEGRASS PLAY-ALONG TRAINER
+   Web Audio metronome + I-IV-V backing with live target guidance.
+   Audio/transport state lives outside the DOM; visuals are driven by
+   a requestAnimationFrame loop synced to the audio clock, so the app's
+   full re-render model never fights the transport.
+   ============================================================ */
+let pracCtx=null, pracMaster=null, pracPlaying=false, pracTempo=80, pracBacking=true;
+let pracTimer=null, pracRAF=0, pracNextTime=0, pracBeat=0, pracBarAbs=0, pracQueue=[], pracEls=null;
+
+function pracFreq(m){ return 440*Math.pow(2,(m-69)/12); }
+function pracProg(){ const kp=SC_NOTES.indexOf(breakKey); return [0,5,7,0].map(iv=>{const pc=(kp+iv)%12; return {pc, name:SC_NOTES[pc]};}); }
+
+function pracClick(t,accent){
+  const o=pracCtx.createOscillator(), g=pracCtx.createGain();
+  o.type="square"; o.frequency.value=accent?1800:1150;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(accent?0.32:0.19,t+0.001);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+0.035);
+  o.connect(g); g.connect(pracMaster); o.start(t); o.stop(t+0.05);
+}
+function pracPluck(type,freq,t,dur,peak){
+  const o=pracCtx.createOscillator(), g=pracCtx.createGain();
+  o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(peak,t+0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(pracMaster); o.start(t); o.stop(t+dur+0.02);
+}
+function pracChordAudio(pc,t,barDur){
+  pracPluck("triangle",pracFreq(36+pc),t,0.7,0.34);              // bass on the downbeat
+  [0,4,7].forEach(iv=>{                                          // soft sustained triad pad
+    const o=pracCtx.createOscillator(), g=pracCtx.createGain();
+    o.type="sine"; o.frequency.value=pracFreq(48+pc+iv);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(0.05,t+0.04);
+    g.gain.setValueAtTime(0.05,t+Math.max(0.06,barDur-0.25));
+    g.gain.exponentialRampToValueAtTime(0.0001,t+barDur-0.02);
+    o.connect(g); g.connect(pracMaster); o.start(t); o.stop(t+barDur);
+  });
+}
+function pracScheduler(){
+  const spb=60/pracTempo;
+  while(pracNextTime < pracCtx.currentTime+0.12){
+    const beat=pracBeat, bar=pracBarAbs, t=pracNextTime;
+    pracClick(t, beat===0);
+    if(beat===0 && bar>0 && pracBacking){
+      const prog=pracProg(), ch=prog[(bar-1)%prog.length];
+      pracChordAudio(ch.pc, t, spb*4);
+    }
+    pracQueue.push({t, beat, bar});
+    pracBeat++;
+    if(pracBeat>3){ pracBeat=0; pracBarAbs++; }
+    pracNextTime += spb;
+  }
+}
+function pracDraw(){
+  if(!pracPlaying) return;
+  const now=pracCtx.currentTime;
+  while(pracQueue.length && pracQueue[0].t<=now){
+    const ev=pracQueue.shift();
+    pracShowBeat(ev.beat);
+    if(ev.beat===0) pracShowBar(ev.bar);
+  }
+  pracRAF=requestAnimationFrame(pracDraw);
+}
+function pracShowBeat(beat){
+  if(!pracEls) return;
+  pracEls.dots.forEach((d,i)=>{ d.classList.toggle("on",i===beat); d.classList.toggle("acc",i===beat&&beat===0); });
+}
+function pracShowBar(bar){
+  if(!pracEls) return;
+  const prog=pracProg();
+  if(bar===0){ pracEls.chord.textContent="Ready"; pracEls.target.textContent="count in\u2026"; pracEls.prog.forEach(c=>c.classList.remove("on")); return; }
+  const idx=(bar-1)%prog.length, ch=prog[idx], third=SC_NOTES[(ch.pc+4)%12];
+  pracEls.chord.textContent=ch.name;
+  pracEls.target.innerHTML=`aim for the 3rd \u00b7 <b>${third}</b>`;
+  pracEls.prog.forEach((c,i)=>c.classList.toggle("on",i===idx));
+  if(pracEls.fret) pracEls.fret.innerHTML=breakBoardSVG(SC_NOTES.indexOf(breakKey), ch.pc);
+}
+function pracStart(){
+  if(pracPlaying) return;
+  if(!pracCtx){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC){ alert("Audio isn\u2019t supported in this browser."); return; } pracCtx=new AC(); pracMaster=pracCtx.createGain(); pracMaster.connect(pracCtx.destination); }
+  if(pracCtx.state==="suspended") pracCtx.resume();
+  const n=pracCtx.currentTime;
+  pracMaster.gain.cancelScheduledValues(n); pracMaster.gain.setValueAtTime(1,n);
+  pracBeat=0; pracBarAbs=0; pracQueue=[]; pracNextTime=n+0.15; pracPlaying=true;
+  pracBind();
+  pracTimer=setInterval(pracScheduler,25);
+  pracRAF=requestAnimationFrame(pracDraw);
+}
+function pracStop(){
+  pracPlaying=false;
+  if(pracTimer){ clearInterval(pracTimer); pracTimer=null; }
+  if(pracRAF){ cancelAnimationFrame(pracRAF); pracRAF=0; }
+  if(pracMaster&&pracCtx){ const n=pracCtx.currentTime; pracMaster.gain.cancelScheduledValues(n); pracMaster.gain.setValueAtTime(pracMaster.gain.value,n); pracMaster.gain.linearRampToValueAtTime(0,n+0.06); }
+  const btn=$("pracBtn"); if(btn){ btn.textContent="Start"; btn.classList.remove("on"); }
+  if(pracEls){ pracEls.dots.forEach(d=>d.classList.remove("on","acc")); if(pracEls.chord)pracEls.chord.textContent="Ready"; if(pracEls.target)pracEls.target.textContent="press start"; pracEls.prog.forEach(c=>c.classList.remove("on")); }
+}
+function pracBind(){
+  const btn=$("pracBtn"); if(btn) btn.onclick=()=>{ pracPlaying?pracStop():pracStart(); };
+  const tempo=$("pracTempo"); if(tempo) tempo.oninput=(e)=>{ pracTempo=+e.target.value; const b=$("pracBpm"); if(b) b.textContent=pracTempo; };
+  const back=$("pracBack"); if(back) back.onclick=()=>{ pracBacking=!pracBacking; back.classList.toggle("on",pracBacking); back.textContent="Backing: "+(pracBacking?"on":"off"); };
+  if(pracPlaying){
+    if(btn){ btn.textContent="Stop"; btn.classList.add("on"); }
+    pracEls={ dots:[...document.querySelectorAll("#pracBeats .pdot")], chord:$("pracChord"), target:$("pracTarget"), prog:[...document.querySelectorAll("#pracProg .pcell")], fret:$("pracFret") };
+  }
+}
+
+function renderPlayInner(){
+  const kp=SC_NOTES.indexOf(breakKey), prog=pracProg();
+  const keyChips=["G","C","D","A"].map(k=>`<button class="chip ${k===breakKey?'on':''}" data-bkey="${k}">${k}</button>`).join("");
+  const roman=["I","IV","V","I"];
+  const progCells=prog.map((c,i)=>`<div class="pcell">${c.name}<span>${roman[i]}</span></div>`).join("");
+  const dots=[0,1,2,3].map(()=>`<i class="pdot"></i>`).join("");
+  return `
+    <div class="psub">Play along with the changes. As each chord comes around, land your run on the highlighted target \u2014 the metronome and backing keep your timing honest.</div>
+    <div class="scctl"><div class="scctl-label">Key</div><div class="filters scscroll" id="bkey" style="flex-wrap:wrap">${keyChips}</div></div>
+    <div class="pracpanel">
+      <div class="pracnow"><div class="pracchord" id="pracChord">Ready</div><div class="practarget" id="pracTarget">press start</div></div>
+      <div class="pbeats" id="pracBeats">${dots}</div>
+      <div class="pprog" id="pracProg">${progCells}</div>
+      <div class="fretwrap" id="pracFret">${breakBoardSVG(kp, prog[0].pc)}</div>
+      <div class="praccontrols">
+        <button class="pracbtn" id="pracBtn">Start</button>
+        <div class="practempo"><label>Tempo <b id="pracBpm">${pracTempo}</b> bpm</label><input type="range" id="pracTempo" min="50" max="150" step="2" value="${pracTempo}"></div>
+        <button class="pracback ${pracBacking?'on':''}" id="pracBack">Backing: ${pracBacking?'on':'off'}</button>
+      </div>
+      <div class="prachint">Start slow. Loop it until you can land on the target every time, then nudge the tempo up. One chord per bar, four beats each: I \u2013 IV \u2013 V \u2013 I.</div>
+    </div>`;
+}
+
 function breakBoardSVG(keyPc, chordPc){
   const pal=[0,2,4,7,9].map(i=>(keyPc+i)%12);            // major pentatonic palette
   const R=chordPc, T=(chordPc+4)%12, F=(chordPc+7)%12;   // chord root, major 3rd, 5th
@@ -984,10 +1116,12 @@ E|--3--0--------------|</pre>
 
 function renderScales(){
   const _scrollSX={}; ["scroot","sctype","fretscroll","bkey"].forEach(k=>{const el=$(k);if(el)_scrollSX[k]=el.scrollLeft;});
-  const modeToggle=`<div class="sctoggles" style="margin-top:10px"><div class="seg"><button class="${scaleMode==="scales"?"on":""}" data-scmode="scales">Scales</button><button class="${scaleMode==="breaks"?"on":""}" data-scmode="breaks">Breaks</button></div></div>`;
+  const modeToggle=`<div class="sctoggles" style="margin-top:10px"><div class="seg"><button class="${scaleMode==="scales"?"on":""}" data-scmode="scales">Scales</button><button class="${scaleMode==="breaks"?"on":""}" data-scmode="breaks">Breaks</button><button class="${scaleMode==="play"?"on":""}" data-scmode="play">Play</button></div></div>`;
   let body;
   if(scaleMode==="breaks"){
     body=renderBreaksInner();
+  } else if(scaleMode==="play"){
+    body=renderPlayInner();
   } else {
     const rootChips=SC_NOTES.map(n=>`<button class="chip ${n===scaleRoot?'on':''}" data-scroot="${n}">${n}</button>`).join("");
     const typeChips=Object.keys(SCALES).map(k=>`<button class="chip ${k===scaleType?'on':''}" data-sctype="${k}">${SCALES[k].name}</button>`).join("");
@@ -1015,10 +1149,12 @@ function renderScales(){
   root.innerHTML=chrome(inner,"scales");
   Object.keys(_scrollSX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollSX[k];}});
   keepScroll("scales");
+  if(scaleMode==="play") pracBind();
 }
 
 function render(){
   const r=route();
+  if(pracPlaying && r.view!=="scales") pracStop();
   if(r.view!=="song" && detachNotes){ detachNotes(); detachNotes=null; notesSongId=null; currentNotes=[]; }
   if(r.view!=="spin") lastSpinPick=null;
   if(r.view==="home") renderHome();
@@ -1074,8 +1210,8 @@ document.addEventListener("click",e=>{
   const scv=e.target.closest("[data-scview]"); if(scv){ scaleView=scv.getAttribute("data-scview"); render(); return; }
   const scl=e.target.closest("[data-sclabels]"); if(scl){ scaleLabels=scl.getAttribute("data-sclabels"); render(); return; }
   const scp=e.target.closest("[data-scpos]"); if(scp){ const an=scAnchors(); const d=scp.getAttribute("data-scpos")==="next"?1:-1; scalePos=Math.max(0,Math.min(an.length-1,scalePos+d)); render(); return; }
-  const scm=e.target.closest("[data-scmode]"); if(scm){ scaleMode=scm.getAttribute("data-scmode"); render(); return; }
-  const bky=e.target.closest("[data-bkey]"); if(bky){ breakKey=bky.getAttribute("data-bkey"); render(); return; }
+  const scm=e.target.closest("[data-scmode]"); if(scm){ pracStop(); scaleMode=scm.getAttribute("data-scmode"); render(); return; }
+  const bky=e.target.closest("[data-bkey]"); if(bky){ if(pracPlaying) pracStop(); breakKey=bky.getAttribute("data-bkey"); render(); return; }
   const bch=e.target.closest("[data-bchord]"); if(bch){ breakChord=parseInt(bch.getAttribute("data-bchord"),10)||0; render(); return; }
   const ucl=e.target.closest("[data-uclear]"); if(ucl){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uStarOnly=false; render(); return; }
   const sb=e.target.closest("[data-sort]"); if(sb){ const m=sb.getAttribute("data-sort");

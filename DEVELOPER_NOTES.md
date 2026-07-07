@@ -597,3 +597,39 @@ Wiring: handlers `data-scmode`, `data-bkey`, `data-bchord` added to the click di
 
 **Deferred:** per-key G-run tabs (currently G only + capo note); tying the break helper to a
 song's key; a play-along drone (the "more work" option not chosen this pass).
+
+## 27. Play-along practice trainer (campfire-v35)
+
+Third mode in the Scales tab: `Scales | Breaks | Play`. Active, guided practice for bluegrass
+runs — a metronome + I-IV-V backing that walks the changes while showing the live target.
+
+**Why it needed care:** the app re-renders the whole view on every interaction, which is hostile
+to a live audio transport. So all transport/audio state lives in module vars (never the DOM), and
+the running visuals are updated by direct DOM writes, not by `render()`.
+
+**Audio (Web Audio, no deps, no samples).** Standard lookahead scheduler (Chris-Wilson pattern):
+a 25ms `setInterval` schedules clicks/notes ahead of `pracCtx.currentTime`; a `requestAnimationFrame`
+loop (`pracDraw`) pops a time-stamped queue to update visuals in sync. Voices: a square-wave click
+(accented on beat 1), a triangle bass pluck on the downbeat, and a soft 3-osc sine triad pad per
+bar. Everything routes through `pracMaster`; Stop ramps that gain to 0 in 60ms so nothing rings on.
+`pracCtx` is created lazily inside the Start handler (needs a user gesture; iOS-safe) and reused.
+
+**Form:** one bar of count-in, then a 4-bar I-IV-V-I loop, 4/4, one chord per bar. `pracProg()`
+derives it from `breakKey` (G/C/D/A). Tempo 50-150 bpm (range slider, live), backing on/off (live).
+
+**UI (`renderPlayInner`):** big current-chord readout + "aim for the 3rd" target, a 4-dot beat
+indicator, the 4-cell progression strip (current bar highlit), a live chord-tone fretboard
+(reuses `breakBoardSVG`, swapped each bar), Start/Stop, tempo slider, backing toggle.
+
+**Re-render safety:** transport controls use direct `.onclick`/`.oninput` (not the global click
+delegator), attached by `pracBind()` after each play render. `pracBind()` also re-acquires
+`pracEls` and relabels the button when `pracPlaying`, so a forced re-render mid-play (e.g. a
+Firestore snapshot) rebinds to the fresh DOM without dropping the transport. Playback is stopped
+on mode switch (`data-scmode`), key change (`data-bkey`), and — via a guard at the top of
+`render()` — whenever the view leaves `scales`.
+
+**Files:** `app.js` (practice block + wiring), `style.css` (`.pracpanel` etc.), `sw.js`
+(cache **v34 -> v35**). `index.html` unchanged.
+
+**Deferred:** real strummed backing (samples), selectable/longer progressions, per-key G-run tabs,
+a "target hit" listener via mic. Current backing is synth pad + click, intentionally simple.
