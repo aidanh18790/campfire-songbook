@@ -56,16 +56,22 @@ function diffBars(level){
 function diffChip(level,title){ if(!level) return ""; return `<span class="cdiff" title="${esc(title||('Difficulty '+(+level).toFixed(1)+'/5'))}">${diffBars(level)}</span>`; }
 // Interactive rater (song page + roulette). Each segment has two tap zones: the left half
 // sets the .5 value, the right half sets the whole. Tapping the current value clears it.
-function diffRater(songId,current){
+function diffRater(songId,current,ratable){
+  const canRate = ratable!==false;   // default true; pass false to render the meter read-only
   const v=current||0; let segs="";
   for(let i=1;i<=5;i++){
     const col=diffColor(i);
     const fill = v>=i?`width:100%;background:${col}` : v>=i-0.5?`width:50%;background:${col}` : `width:0`;
-    segs+=`<span class="dseg"><span class="dfill" style="${fill}"></span>`+
-      `<span class="dhalf l" data-diff="${songId}" data-difflevel="${i-0.5}" aria-label="difficulty ${i-0.5}"></span>`+
-      `<span class="dhalf r" data-diff="${songId}" data-difflevel="${i}" aria-label="difficulty ${i}"></span></span>`;
+    // Interactive tap zones only exist when the song is ratable (i.e. in the user's Currently
+    // Know list). Otherwise the meter still shows any saved value, just read-only.
+    const halves = canRate
+      ? `<span class="dhalf l" data-diff="${songId}" data-difflevel="${i-0.5}" aria-label="difficulty ${i-0.5}"></span>`+
+        `<span class="dhalf r" data-diff="${songId}" data-difflevel="${i}" aria-label="difficulty ${i}"></span>`
+      : "";
+    segs+=`<span class="dseg"><span class="dfill" style="${fill}"></span>${halves}</span>`;
   }
-  return `<div class="diffrater"><div class="dsegs">${segs}</div><span class="dlabel">${current?diffLabel(current):"Tap to rate"}</span></div>`;
+  const label = current ? diffLabel(current) : (canRate ? "Tap to rate" : "Not rated");
+  return `<div class="diffrater${canRate?"":" ro"}"><div class="dsegs">${segs}</div><span class="dlabel">${label}</span></div>`;
 }
 /* ---------- arrangement ("how do you play it") ---------- */
 // Replaces the old free-text rating note. Three preset choices plus "Other"; the text
@@ -294,10 +300,18 @@ async function setStatus(songId,status){
   if(status==='learning' && cur.status!=='learning' && learningCount()>=LEARNING_LIMIT){
     toast(`Currently Learning is full (max ${LEARNING_LIMIT}). Move one out first.`); return false;
   }
-  await writeEntry(songId,{status,starred:cur.starred,difficulty:cur.difficulty,diffNote:cur.diffNote}); return true;
+  // A star only makes sense while the song is in Currently Know. Moving it to any other
+  // category (or off your lists) drops the star (and, via writeEntry, its featured pin) —
+  // but the difficulty rating and its arrangement note stay attached to you, so they're
+  // still there (read-only) and become editable again if it returns to Currently Know.
+  const keepStar = status==='known' ? cur.starred : false;
+  await writeEntry(songId,{status,starred:keepStar,difficulty:cur.difficulty,diffNote:cur.diffNote}); return true;
 }
 async function toggleStar(songId){
   const cur=myEntry(songId);
+  // Stars live only on songs you currently know. Block starring anything else; still allow
+  // un-starring a legacy star that predates this rule.
+  if(cur.status!=='known' && !cur.starred){ toast("Add this to Currently Know to star it."); return; }
   await writeEntry(songId,{status:cur.status,starred:!cur.starred,difficulty:cur.difficulty,diffNote:cur.diffNote});
 }
 // Pin/unpin a starred song in the profile's Starred band. Idempotent (explicit on/off,
@@ -309,6 +323,9 @@ async function setFeatured(songId,on){
 }
 async function setDifficulty(songId,level){
   const cur=myEntry(songId);
+  // You can only change a rating while the song is in your Currently Know list. A saved rating
+  // on a non-known song stays put (shown read-only) until the song is known again.
+  if(cur.status!=='known'){ toast("Add this to Currently Know to rate its difficulty."); return; }
   const next=(cur.difficulty===level)?null:level;       // tapping the current value clears it
   const note=next?cur.diffNote:"";                        // clearing the rating clears its arrangement too
   if(!next) arrangeOther.delete(songId);                  // and collapses any open Other box
@@ -537,7 +554,7 @@ function supplyDemandSection(id){
 function renderSong(id){
   const s=songsMap[id];
   if(!s){ root.innerHTML=chrome(`<button class="back" data-go="/">&larr; Back</button><div class="empty"><div class="big">Song not found</div>It may have been removed.</div>`,"home"); return; }
-  const e=myEntry(id); const L=searchLinks(s.title,s.artist);
+  const e=myEntry(id); const known=e.status==='known'; const L=searchLinks(s.title,s.artist);
   if(notesSongId!==id) currentNotes=[];
   const tags=(s.genres||[]).map(g=>`<span class="tag" style="--tc:${gcolor(g)}">${esc(g)}</span>`).join("");
   const addedLink = s.addedBy && s.addedBy!=="seed" ? `Added by <a data-go="/user/${s.addedBy}">${esc(nameOf(s.addedBy,s.addedByName))}</a>` : `From the original songbook`;
@@ -560,12 +577,13 @@ function renderSong(id){
       <button class="sbtn todo ${e.status==='todo'?'on':''}" data-set="todo" data-id="${id}">To-Do</button>
       <button class="sbtn learning ${e.status==='learning'?'on':''}" data-set="learning" data-id="${id}">Currently Learning</button>
       <button class="sbtn known ${e.status==='known'?'on':''}" data-set="known" data-id="${id}">Currently Know</button>
-      <button class="star ${e.starred?'on':''}" data-star="${id}" aria-label="favorite">${starSvg(e.starred)}</button></div></div>
+      <button class="star ${e.starred?'on':''} ${known?'':'locked'}" data-star="${id}" aria-label="favorite" title="${known?'':'Add to Currently Know to star this'}">${starSvg(e.starred)}</button></div></div>
     <div class="section"><h3>Difficulty</h3>
-      ${diffRater(id,e.difficulty)}
-      <div class="arrange">
-        <div class="arrange-lbl">${e.difficulty?"How are you playing it?":"Rate it first, then pick how you play it"}</div>
-        ${arrangePicker(id,e.diffNote,!!e.difficulty,"diffnote","savediff","diffsaved")}</div>
+      ${diffRater(id,e.difficulty,known)}
+      ${known?"":`<div class="ratelock">${e.difficulty?"Your difficulty rating is saved &mdash; move this back to <b>Currently Know</b> to change it.":"You can rate how hard it is to play once it&rsquo;s in your <b>Currently Know</b> list."}</div>`}
+      ${(known||e.difficulty)?`<div class="arrange">
+        <div class="arrange-lbl">${known?(e.difficulty?"How are you playing it?":"Rate it first, then pick how you play it"):"How you play it"}</div>
+        ${arrangePicker(id,e.diffNote,known&&!!e.difficulty,"diffnote","savediff","diffsaved")}</div>`:""}
       <div class="diffavg">${(()=>{const ad=avgDiff(id);return ad?`Group average <b>${ad.value.toFixed(1)}</b> / 5 &middot; ${ad.count} rating${ad.count!==1?"s":""}`:`No ratings yet &mdash; you&rsquo;re the first`;})()}</div>
       ${(()=>{const by=((allLists[id]&&allLists[id].diffBy)||[]).filter(d=>d.uid!==me.uid).sort((a,b)=>(b.note?1:0)-(a.note?1:0)||b.difficulty-a.difficulty);
         if(!by.length) return "";
@@ -798,7 +816,7 @@ function renderSpin(){
     sel:(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null };
   // The card revealed after a spin. Pulled out so re-renders (e.g. rating the song,
   // which writes to Firestore and triggers a re-render) can restore it instead of wiping it.
-  const pickCard=w=>{ const ent=myEntry(w.id);
+  const pickCard=w=>{ const ent=myEntry(w.id); const rk=ent.status==='known';
     return `<div class="pick-card">
       <div data-open="${w.id}" style="cursor:pointer">
         <div class="pick-label">Play this one</div>
@@ -806,8 +824,8 @@ function renderSpin(){
         <div class="pick-artist">${esc(w.artist)}</div>
         <div class="pick-tap">Tap to open the song &rarr;</div>
       </div>
-      <div class="pick-diff"><span class="pick-diff-l">How hard is it to play?</span>${diffRater(w.id,ent.difficulty)}
-        <div class="arrange" style="width:100%">${arrangePicker(w.id,ent.diffNote,!!ent.difficulty,"spindiffnote","spinsavediff","spindiffsaved")}</div>
+      <div class="pick-diff"><span class="pick-diff-l">How hard is it to play?</span>${diffRater(w.id,ent.difficulty,rk)}
+        <div class="arrange" style="width:100%">${arrangePicker(w.id,ent.diffNote,rk&&!!ent.difficulty,"spindiffnote","spinsavediff","spindiffsaved")}</div>
       </div>
     </div>`; };
   // Attach handlers to the note field inside whatever pick card is currently shown.

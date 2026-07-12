@@ -683,3 +683,41 @@ back to a default on return (bad), even though the played set correctly persiste
 **Files:** `app.js` (drop nav-time `lastSpinPick=null`; reel seeds placeholder not song list),
 `style.css` (`.slot-ph`, `.sc-ph-mark`, `.sc-ph-title`, `.sc-ph-sub`), `sw.js` (cache **v36 -> v37**).
 `index.html` unchanged.
+
+## 30. Rating & starring are Currently-Know-only; category change keeps the rating (campfire-v38)
+
+The rule now: a difficulty rating and a star both belong to a song you *currently know*. You can
+only set/change either while the song's status is `known`. Moving a song to a different category
+(To-Do, Currently Learning, or off your lists entirely) **drops the star** but **keeps the difficulty
+rating and its arrangement note** attached to you — shown read-only — so they're intact and editable
+again if the song returns to Currently Know.
+
+- **Star = known only.** `toggleStar` refuses when the song isn't `known` (unless the song is already
+  starred, so a legacy star can still be un-starred) and toasts a hint. `setStatus` now writes
+  `starred = (status==='known' ? cur.starred : false)`, so any move away from Currently Know clears
+  the star; `writeEntry`'s existing rule (`featured` can't outlive `starred`) then also unpins it from
+  the Starred band automatically. Difficulty/diffNote are passed through untouched on the status write.
+- **Rating = known only.** `setDifficulty` refuses (with a toast) unless `status==='known'`. It does
+  **not** wipe existing ratings — a saved rating simply becomes read-only while the song is elsewhere.
+  The `writeEntry` keep-alive rule (a doc survives on status **or** star **or** difficulty) means a song
+  pushed off all lists but still carrying a rating keeps its entry, which is what preserves the rating.
+- **Rollup unchanged.** The collection-group rollup still counts any entry with `difficulty >= 0.5`
+  regardless of status, so a retained rating keeps contributing to the group average / "how others
+  rated it" — consistent with the rating "remaining".
+- **Read-only meter.** `diffRater(songId,current,ratable)` gained a third arg. When `ratable===false`
+  it omits the `.dhalf` tap zones (so taps can't fire) and still fills the meter to show the saved
+  value; label reads the value if rated, else "Not rated". Wrapper gets `.ro`.
+- **Where it's wired.** Song page computes `const known=e.status==='known'` and: dims/locks the star
+  button (`.star.locked` + title hint), passes `known` to `diffRater`, shows a `.ratelock` hint line
+  when not known (two variants: "rating saved, move it back to change" vs. "add to Currently Know to
+  rate"), and only renders the arrangement block when `known || e.difficulty` (enabled only when
+  `known && rated`). Roulette pick card passes `rk=ent.status==='known'` through as well — defensive,
+  since the spin pool is already known-only.
+- **Coverage.** Every status change funnels through `setStatus` (direct taps, the `+` quick-add sheet's
+  `openListSheet`, and the toggle-off path), so the star-clearing applies uniformly. Home rows and
+  personal-page rows keep their normal star markup and rely on the `toggleStar` guard (tapping a star
+  on a non-known row just toasts the hint rather than starring).
+
+**Files:** `app.js` (`diffRater` read-only mode; guards in `toggleStar`/`setDifficulty`; star-clear in
+`setStatus`; song-page + roulette wiring), `style.css` (`.star.locked`, `.diffrater.ro`, `.ratelock`),
+`sw.js` (cache **v37 -> v38**). `index.html` unchanged.

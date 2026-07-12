@@ -96,6 +96,7 @@
   .tag{font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 8px;border-radius:6px;color:var(--tc,var(--g-other));background:color-mix(in srgb,var(--tc,var(--g-other)) 15%,transparent);border:1px solid color-mix(in srgb,var(--tc,var(--g-other)) 30%,transparent);}
   .star{flex:0 0 auto;width:32px;height:32px;border-radius:50%;border:none;background:transparent;cursor:pointer;display:grid;place-items:center;color:var(--faint);transition:color .2s,transform .2s;}
   .star:active{transform:scale(.85);} .star.on{color:var(--amber);}
+  .star.locked{opacity:.38;} .star.locked:active{transform:none;}
   .counter{display:flex;gap:10px;align-items:center;margin-top:4px;font-size:12px;font-weight:600;flex-wrap:wrap;}
   .counter .cknown{color:var(--known);display:inline-flex;align-items:center;gap:4px;}
   .counter .ctodo{color:var(--todo);display:inline-flex;align-items:center;gap:4px;}
@@ -165,6 +166,9 @@
   .dseg .dhalf.l{left:0;} .dseg .dhalf.r{right:0;}
   .dseg .dhalf:active{background:rgba(246,236,219,.07);}
   .dlabel{color:var(--muted);font-size:13.5px;font-weight:600;}
+  .diffrater.ro .dseg{cursor:default;} .diffrater.ro .dlabel{color:var(--faint);}
+  .ratelock{color:var(--muted);font-size:13px;line-height:1.45;margin-top:9px;}
+  .ratelock b{color:var(--cream);font-weight:600;}
   .diffavg{color:var(--faint);font-size:13px;margin-top:12px;} .diffavg b{color:var(--cream);}
   .diffnote-wrap{margin-top:14px;}
   .diffnote-in{width:100%;font-size:15px;}
