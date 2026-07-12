@@ -660,3 +660,26 @@ on weak beats; you approach the next chord's tone near the end of each bar. Land
 
 **Files:** `app.js` (breakBoardSVG aim arg, pracShowBar, renderPlayInner, pracBind/pracStop),
 `style.css` (aim readout + `.pcell.aim`), `sw.js` (cache **v35 -> v36**). `index.html` unchanged.
+
+## 29. Spin page: reveal persists across nav + empty-slot placeholder (campfire-v37)
+
+Two spin-page fixes from feedback: (1) leaving the spin page reset the displayed "current song"
+back to a default on return (bad), even though the played set correctly persisted (good);
+(2) before spinning, the slot parked a real song, which read as if it were already "the pick".
+
+- **Reveal persistence.** `render()` used to run `if(r.view!=="spin") lastSpinPick=null;` on every
+  navigation, wiping the landed song when you left the page. Removed that line (replaced with a note).
+  `lastSpinPick` now survives navigation, so returning to the spin page re-runs the existing restore
+  block (`if(lastSpinPick && songsMap[lastSpinPick])`) which repaints the pick card and parks the
+  winner in the slot window. `spinPlayed` was already untouched by nav, so its persistence is unchanged.
+  Guards that still clear it are intact: the start of a spin, and the Reset button.
+- **Empty-slot placeholder.** `renderSpin` no longer seeds the reel with `(pool?pool:known).map(cell)`
+  (which put a song at the top of the slot before any spin). It now seeds a single neutral cell:
+  `.slot-ph` = a ♪ mark + "Ready to spin" / "Tap below to pick a song". The reel is rebuilt from a
+  fresh `strip` on each spin (unchanged), so removing the initial song list has no effect on the
+  animation. When `lastSpinPick` is set, the restore block overwrites the placeholder with the parked
+  winner, so the placeholder only shows on a genuinely fresh (never-spun) visit.
+
+**Files:** `app.js` (drop nav-time `lastSpinPick=null`; reel seeds placeholder not song list),
+`style.css` (`.slot-ph`, `.sc-ph-mark`, `.sc-ph-title`, `.sc-ph-sub`), `sw.js` (cache **v36 -> v37**).
+`index.html` unchanged.

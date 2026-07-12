@@ -267,6 +267,10 @@
   .slot-cell{height:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 14px;}
   .sc-title{font-family:'Fraunces',serif;font-weight:600;font-size:19px;line-height:1.1;letter-spacing:-.01em;}
   .sc-artist{color:var(--muted);font-size:13px;margin-top:3px;}
+  .slot-ph{opacity:.9;}
+  .sc-ph-mark{color:var(--ember);opacity:.9;margin-right:2px;}
+  .sc-ph-title{font-family:'Fraunces',serif;font-weight:600;font-size:18px;color:var(--cream);letter-spacing:-.01em;}
+  .sc-ph-sub{color:var(--muted);font-size:12px;margin-top:3px;}
   .spinopts{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:18px;flex-wrap:wrap;}
   .toggle{display:inline-flex;align-items:center;gap:10px;background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;padding:4px;}
   .toggle .kn{position:relative;width:44px;height:26px;border-radius:999px;background:var(--card-hi);border:1px solid var(--line);transition:background .2s,border-color .2s;flex:0 0 auto;}

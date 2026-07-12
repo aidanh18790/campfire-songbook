@@ -788,7 +788,10 @@ function renderSpin(){
   if(known.length===0) return;
   const reel=$("reel"), btn=$("spinbtn"), pick=$("pick");
   const cell=s=>`<div class="slot-cell"><div class="sc-title">${esc(s.title)}</div><div class="sc-artist">${esc(s.artist)}</div></div>`;
-  reel.innerHTML=(pool.length?pool:known).map(cell).join("");
+  // Before the first spin there's no song to show, so the slot holds a neutral prompt
+  // rather than parking a real song there and implying it's "the pick".
+  const placeholder=`<div class="slot-cell slot-ph"><div class="sc-ph-title"><span class="sc-ph-mark">\u266A</span> Ready to spin</div><div class="sc-ph-sub">Tap below to pick a song</div></div>`;
+  reel.innerHTML=placeholder;
   // Capture an in-progress note so a re-render (from rating, or a friend's update) doesn't wipe it.
   const _noteCap={ v:(()=>{const el=$("spindiffnote");return el?el.value:null;})(),
     foc:document.activeElement&&document.activeElement.id==="spindiffnote",
@@ -1166,7 +1169,8 @@ function render(){
   const r=route();
   if(pracPlaying && r.view!=="scales") pracStop();
   if(r.view!=="song" && detachNotes){ detachNotes(); detachNotes=null; notesSongId=null; currentNotes=[]; }
-  if(r.view!=="spin") lastSpinPick=null;
+  // NB: lastSpinPick intentionally persists across navigation so returning to the
+  // spin page still shows the song you last landed on (see renderSpin restore block).
   if(r.view==="home") renderHome();
   else if(r.view==="song") renderSong(r.id);
   else if(r.view==="people") renderPeople();
