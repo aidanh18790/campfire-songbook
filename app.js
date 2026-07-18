@@ -483,6 +483,26 @@ function filteredSongs(){
       && (!learningOnly || (((allLists[s.id]&&allLists[s.id].learning)||[]).length>0)))
     .sort(songCmp(sortMode,sortDir));
 }
+// Update ONLY the song rows + the "showing" summary in place, leaving the chrome, search
+// input, and filter chips untouched. Used for live search so typing never tears down and
+// rebuilds the whole page (which was the source of search-bar lag). Because the <input> is
+// never recreated, focus and caret position are preserved for free — no refocus needed.
+function refreshHomeList(){
+  const list=document.querySelector(".home-list"); if(!list) return;
+  const rows=filteredSongs();
+  list.innerHTML = rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`;
+  const inc=[...activeGenres], exc=[...excludeGenres], parts=[];
+  if(inc.length)parts.push(inc.join(" / "));
+  if(exc.length)parts.push("no "+exc.join(" / "));
+  if(addedByFilter)parts.push("by "+(addedByFilter==="seed"?"Songbook":nameOf(addedByFilter,"someone")));
+  if(learningOnly)parts.push("being learned");
+  let showing;
+  if(parts.length) showing=`${rows.length} song${rows.length!==1?"s":""} \u00b7 ${parts.join(", ")}`;
+  else showing=query?`${rows.length} match${rows.length!==1?"es":""}`:"All songs";
+  const sh=$("showing"); if(sh) sh.textContent=showing;
+  const active=(activeGenres.size||excludeGenres.size||query||addedByFilter||learningOnly);
+  const cl=$("clear"); if(cl) cl.classList.toggle("show",!!active);
+}
 function renderHome(){
   const chips=[`<button class="chip all ${(activeGenres.size===0&&excludeGenres.size===0)?'on':''}" data-genre="__all">All</button>`]
     .concat(allGenres().map(g=>{
@@ -525,14 +545,14 @@ function renderHome(){
         ${adderRow}
         ${viewRow}
       </div>
-      <div class="meta"><span>${showing}</span><span class="clear ${active?'show':''}" id="clear">Clear</span></div>
+      <div class="meta"><span id="showing">${showing}</span><span class="clear ${active?'show':''}" id="clear">Clear</span></div>
     </div>
     <div class="list home-list">${rows.length?rows.map(songRow).join(""):`<div class="empty"><div class="big">No songs found</div>Try a different search or clear filters.</div>`}</div>`;
   const _scrollX={}; ["filters","adderfilter","viewfilter","sortbar"].forEach(k=>{const el=$(k);if(el)_scrollX[k]=el.scrollLeft;});
   root.innerHTML=chrome(inner,"home")+`<button class="fab" id="fab"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>Add a Song</button>`+`<button class="totop" id="totop"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14V5M4 9l5-5 5 5"/></svg>Top</button>`;
   Object.keys(_scrollX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollX[k];}});
   keepScroll("home");
-  const si=$("search"); if(si){ const reHome=debounce(()=>{ if(route().view!=="home") return; renderHome(); const n=$("search"); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } },140); si.addEventListener("input",e=>{ query=e.target.value; reHome(); }); }
+  const si=$("search"); if(si){ const reHome=debounce(()=>{ if(route().view==="home") refreshHomeList(); },90); si.addEventListener("input",e=>{ query=e.target.value; reHome(); }); }
   $("fab").onclick=openAddSheet; const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();excludeGenres.clear();query="";addedByFilter=null;learningOnly=false;renderHome();};
   const ft=$("filtertog"); if(ft) ft.onclick=()=>{ filtersOpen=!filtersOpen; renderHome(); };
   const wrap=document.querySelector(".wrap"), tt=$("totop");

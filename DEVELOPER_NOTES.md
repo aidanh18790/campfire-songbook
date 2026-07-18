@@ -760,3 +760,25 @@ People page often appeared to do nothing — worse for people with larger song l
 **Files:** `app.js` (debounce helper; `profUid/profEntries/profLoading/profGen` state;
 `renderUser`/`paintUser`/`paintUserLoading` split; cache invalidation in `render()`; debounced
 `#search`/`#usearch`), `sw.js` (cache **v38 -> v39**). `style.css` and `index.html` unchanged.
+
+## 32. Search still laggy after v39 — switch home search to in-place list updates (v40)
+
+**Follow-up to #31.** v39's debounce spaced out the re-renders but each one still did a *full*
+`renderHome()` — `root.innerHTML = chrome(...)` tears down and rebuilds the entire page (nav chrome,
+filter chips, sort bar, **and the search `<input>` itself**), reparses it, re-lays-out every row, then
+refocuses the input and restores the caret (forcing extra reflow). Debouncing the *frequency* of an
+expensive operation doesn't make the operation cheap, so typing still stuttered.
+
+**Fix:** added `refreshHomeList()`, which recomputes `filteredSongs()` and swaps only the
+`.home-list` rows plus the `#showing` summary / `#clear` visibility — leaving the chrome, chips, sort
+bar, and the input element in place. Because the `<input>` is never recreated, focus and caret are
+preserved for free (removed the old `focus()`/`setSelectionRange()` dance). The home search handler now
+calls `refreshHomeList()` (debounced 90ms) instead of `renderHome()`. Full `renderHome()` still runs on
+filter/sort taps and background snapshots, so the chip/sort UI stays correct.
+
+Note: the profile search (`#usearch`) is already much lighter post-#31 (cache hit, no Firestore read)
+but still does a fuller `renderUser` redraw; if it feels laggy on large profiles, give it the same
+in-place treatment (three sections + starred band make it a bit more involved).
+
+**Files:** `app.js` (`refreshHomeList()`; `id="showing"` on the summary span; home search handler),
+`sw.js` (cache **v39 -> v40**). `style.css` and `index.html` unchanged.
