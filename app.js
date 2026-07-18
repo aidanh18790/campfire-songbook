@@ -382,7 +382,19 @@ function route(){
   if(parts[0]==="user") return {view:"user",uid:parts[1]};
   return {view:"home"};
 }
-function rerender(){ if(me) render(); }
+function rerender(){
+  if(!me) return;
+  // A background data change (someone else starring/rating a song fires the Firestore
+  // listeners) must NOT do a full render while the user is typing in a search box: a full
+  // render rebuilds .wrap, which destroys the focused <input> — dropping the caret,
+  // flickering the mobile keyboard, and snapping scroll back via keepScroll. Instead, fold
+  // the new data into the list in place (home) or leave the view untouched (profile, which
+  // reads a per-visit cache anyway and will refresh on the next interaction).
+  const a=document.activeElement, r=route();
+  if(a && a.id==="search" && r.view==="home"){ refreshHomeList(); return; }
+  if(a && a.id==="usearch" && r.view==="user") return;
+  render();
+}
 window.addEventListener("hashchange",()=>{ if(detachNotes){detachNotes();detachNotes=null;notesSongId=null;} render(); });
 window.addEventListener("online",()=>{online=true;render();});
 window.addEventListener("offline",()=>{online=false;render();});

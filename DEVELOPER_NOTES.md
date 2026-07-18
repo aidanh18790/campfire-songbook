@@ -782,3 +782,28 @@ in-place treatment (three sections + starred band make it a bit more involved).
 
 **Files:** `app.js` (`refreshHomeList()`; `id="showing"` on the summary span; home search handler),
 `sw.js` (cache **v39 -> v40**). `style.css` and `index.html` unchanged.
+
+## 33. Search still glitchy after v40 — stop background snapshots from clobbering the search box (v41)
+
+**Follow-up to #31–32.** The remaining lag/glitch wasn't in the search *handler* at all — it was the
+*listeners*. All four `onSnapshot` listeners (songs, myLists, users, collection-group lists) call
+`rerender() -> render()`, and a full render rebuilds `chrome()`, which recreates `.wrap` and the
+`#search` input inside it, then `keepScroll` resets scrollTop. So whenever *anyone* in the group
+stars/rates/changes a song while you're typing, your focused `<input>` is destroyed mid-keystroke:
+caret dropped, mobile keyboard flickers, scroll snaps back. v40's in-place fix only governed what the
+search handler did, so it couldn't prevent this.
+
+**Fix:** `rerender()` now checks `document.activeElement` before doing a destructive full render. If a
+search box is focused, it folds the new data in without tearing down the view:
+- `#search` focused on home -> `refreshHomeList()` (in-place rows, input + scroll untouched)
+- `#usearch` focused on a profile -> skip the render entirely (the profile reads a per-visit cache
+  from #31, so a background change wouldn't surface until re-fetch anyway; refreshes on next
+  interaction)
+Otherwise it renders normally.
+
+**If search still feels heavy after this,** the remaining cost is raw DOM size — rebuilding N `.home-list`
+rows on a very large songbook. Next lever would be capping rendered rows (e.g. show first ~150 matches)
+or windowing/virtualization; deferred until confirmed necessary to avoid premature complexity.
+
+**Files:** `app.js` (`rerender()` guard), `sw.js` (cache **v40 -> v41**). `style.css` / `index.html`
+unchanged.
