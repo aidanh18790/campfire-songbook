@@ -721,3 +721,42 @@ again if the song returns to Currently Know.
 **Files:** `app.js` (`diffRater` read-only mode; guards in `toggleStar`/`setDifficulty`; star-clear in
 `setStatus`; song-page + roulette wiring), `style.css` (`.star.locked`, `.diffrater.ro`, `.ratelock`),
 `sw.js` (cache **v37 -> v38**). `index.html` unchanged.
+
+## 31. Search lag + flaky profile taps — debounce, profile-list caching, async race guard (v39)
+
+**Symptoms:** the home/profile search bars were laggy while typing, and tapping a person on the
+People page often appeared to do nothing — worse for people with larger song lists.
+
+**Root cause (one shared design flaw in the render loop):**
+- **No debouncing anywhere.** Every keystroke in `#search`/`#usearch` triggered a *full-page*
+  re-render. On the home page that rebuilds every song row + chrome and re-binds listeners per
+  character.
+- **`renderUser` coupled fetch to paint.** It was `async` and `await`ed a Firestore `getDocs` of the
+  whole `users/{uid}/lists` subcollection on *every* render — so typing in a profile search fired one
+  network read per keystroke. Bigger lists = slower reads = more lag.
+- **Dead-tap perception + async race.** With no loading state, the tap-to-data gap looked like a
+  failed click (bigger account = longer gap = "specific people are worse"). Worse, the four
+  `onSnapshot` listeners (songs, myLists, users, collection-group `lists`) each call
+  `rerender()->render()->renderUser`, spawning concurrent in-flight fetches. Out-of-order resolution
+  let a slow big-account fetch land *after* a newer render and clobber the DOM — profiles that
+  "failed to open" or bounced back.
+
+**Fix:**
+- Added a `debounce(fn,ms)` helper; both search inputs now re-render on a 140ms trailing edge, with a
+  route guard so a late fire can't paint over a view you've navigated away from.
+- Split `renderUser` into `renderUser` (data acquisition) + `paintUser(uid, entries)` (pure paint) +
+  `paintUserLoading(uid)` (instant header shown while fetching).
+  - **Your own profile** (`isMe`) paints straight off the always-live `myLists` — no fetch, self-edits
+    show instantly.
+  - **Other people** are **fetched once per visit** into `profEntries` (cached, keyed by `profUid`);
+    search/filter/sort re-paint off the cache with zero network.
+- **Race guard:** a `profGen` generation token + `profLoading` in-flight uid. A superseded fetch is
+  discarded (`myGen!==profGen`), and a fetch that resolves after you've navigated away is dropped
+  (route re-check). Concurrent duplicate loads for the same uid are deduped.
+- **Cache invalidation:** `render()` clears `profUid/profEntries/profLoading` whenever the view isn't
+  `user`, so leaving and returning re-fetches ("once per visit") while background snapshot re-renders
+  (which keep `view==="user"`) reuse the cache instead of re-fetching on every list change.
+
+**Files:** `app.js` (debounce helper; `profUid/profEntries/profLoading/profGen` state;
+`renderUser`/`paintUser`/`paintUserLoading` split; cache invalidation in `render()`; debounced
+`#search`/`#usearch`), `sw.js` (cache **v38 -> v39**). `style.css` and `index.html` unchanged.

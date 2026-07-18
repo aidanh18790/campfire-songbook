@@ -161,6 +161,10 @@ let scrollMem={};              // remembers each list view's scroll so leaving/r
 let noRepeats=false, spinPlayed=new Set();
 let lastSpinPick=null;     // id of the song the wheel last landed on (survives re-renders so rating it doesn't wipe the reveal)
 let lastUserView=null;
+let profUid=null;        // uid whose lists are cached in profEntries (other people only)
+let profEntries=null;    // fetch-once-per-visit cache of a profile's lists subcollection
+let profLoading=null;    // uid currently being fetched (dedupes concurrent loads)
+let profGen=0;           // generation token; a superseded in-flight fetch is discarded
 let isAdmin=(()=>{try{return localStorage.getItem("cf-admin")==="1";}catch(e){return false;}})();
 let detachNotes=null, currentNotes=[], notesSongId=null, lastSong=null;
 let myPersonalNotes={};  // songId -> text, populated by the notes listener, survives navigation
@@ -366,6 +370,8 @@ function startListeners(){
    ROUTER
    ============================================================ */
 function go(hash){ location.hash=hash; }
+// Coalesce rapid calls (e.g. per-keystroke search) into one trailing invocation.
+function debounce(fn,ms){ let t; return function(...a){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,a),ms); }; }
 function route(){
   const h=location.hash.replace(/^#/,"")||"/"; const parts=h.split("/").filter(Boolean);
   if(parts[0]==="song") return {view:"song",id:parts[1]};
@@ -526,7 +532,7 @@ function renderHome(){
   root.innerHTML=chrome(inner,"home")+`<button class="fab" id="fab"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>Add a Song</button>`+`<button class="totop" id="totop"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14V5M4 9l5-5 5 5"/></svg>Top</button>`;
   Object.keys(_scrollX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollX[k];}});
   keepScroll("home");
-  const si=$("search"); if(si){ si.addEventListener("input",e=>{ query=e.target.value; renderHome(); const n=$("search"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); }); }
+  const si=$("search"); if(si){ const reHome=debounce(()=>{ if(route().view!=="home") return; renderHome(); const n=$("search"); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } },140); si.addEventListener("input",e=>{ query=e.target.value; reHome(); }); }
   $("fab").onclick=openAddSheet; const cl=$("clear"); if(cl) cl.onclick=()=>{activeGenres.clear();excludeGenres.clear();query="";addedByFilter=null;learningOnly=false;renderHome();};
   const ft=$("filtertog"); if(ft) ft.onclick=()=>{ filtersOpen=!filtersOpen; renderHome(); };
   const wrap=document.querySelector(".wrap"), tt=$("totop");
@@ -649,9 +655,39 @@ async function renderUser(uid){
   if(!uid){ root.innerHTML=chrome(`<div class="empty"><div class="big">No user</div></div>`,"user"); return; }
   if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="added"; uSortDir="desc"; uStarOnly=false; uFiltersOpen=false; lastUserView=uid; }
   const isMe=uid===me.uid;
-  const pname=nameOf(uid,isMe?me.name:"Friend"), pcolor=colorOf(uid,isMe?me.color:null);
+  // Your own profile reads the always-live myLists (kept fresh by its onSnapshot), so no
+  // fetch is needed and self-edits show instantly. Other people's lists are fetched once
+  // per visit and cached in profEntries; search/filter/sort then re-paint off the cache
+  // instead of hitting Firestore on every keystroke.
+  if(isMe){ paintUser(uid, myLists); return; }
+  if(profUid===uid && profEntries){ paintUser(uid, profEntries); return; }
+  if(profLoading===uid) return;              // a fetch for this profile is already in flight
+  const myGen=++profGen; profLoading=uid;
+  paintUserLoading(uid);                      // instant header so the tap never feels dead
   let entries={};
   try{ const snap=await F.getDocs(F.collection(db,"users",uid,"lists")); snap.docs.forEach(d=>entries[d.id]=d.data()); }catch(err){ console.error(err); }
+  if(myGen!==profGen) return;                 // a newer render superseded this fetch — discard
+  profLoading=null;
+  const rt=route(); if(rt.view!=="user"||rt.uid!==uid) return;  // navigated away mid-fetch — discard
+  profUid=uid; profEntries=entries;
+  paintUser(uid, entries);
+}
+
+function paintUserLoading(uid){
+  const isMe=uid===me.uid;
+  const pname=nameOf(uid,isMe?me.name:"Friend"), pcolor=colorOf(uid,isMe?me.color:null);
+  const inner=`
+    <div style="display:flex;align-items:center;gap:14px;margin:16px 2px 6px">${avatar(pname,pcolor,56)}
+      <div><div class="ptitle" style="margin:0;font-size:26px">${esc(pname)}</div>
+      <div class="psub" style="margin:4px 0 0">Loading&hellip;</div></div></div>
+    ${isMe?"":`<button class="back" data-go="/people" style="padding-top:4px">&larr; All people</button>`}
+    <div class="list" style="padding:48px 0;text-align:center;color:var(--faint)">Loading songs&hellip;</div>`;
+  root.innerHTML=chrome(inner,"user");
+}
+
+function paintUser(uid, entries){
+  const isMe=uid===me.uid;
+  const pname=nameOf(uid,isMe?me.name:"Friend"), pcolor=colorOf(uid,isMe?me.color:null);
   const uq=uQuery.trim().toLowerCase();
   const cmp=songCmp(uSort,uSortDir);
   // On a personal page, "Date added" means added to THIS person's list (their entry's
@@ -760,7 +796,7 @@ async function renderUser(uid){
   keepScroll("user:"+uid);
   Object.keys(_scrollUX).forEach(k=>{const el=$(k);if(el){void el.scrollWidth;el.scrollLeft=_scrollUX[k];}});
   if(_focId){ const el=$(_focId); if(el){ el.focus(); if(_sel!=null){ try{el.setSelectionRange(_sel,_sel);}catch(e){} } } }
-  const usi=$("usearch"); if(usi) usi.addEventListener("input",e=>{ uQuery=e.target.value; renderUser(uid); });
+  const usi=$("usearch"); if(usi){ const reU=debounce(()=>{ const rt=route(); if(rt.view!=="user"||rt.uid!==uid) return; renderUser(uid); },140); usi.addEventListener("input",e=>{ uQuery=e.target.value; reU(); }); }
   const uft=$("ufiltertog"); if(uft) uft.onclick=()=>{ uFiltersOpen=!uFiltersOpen; renderUser(uid); };
   const en=$("editname"); if(en) en.onclick=openEditName;
   const cb=$("codebtn"); if(cb) cb.onclick=openCodeSheet;
@@ -1185,6 +1221,10 @@ function renderScales(){
 
 function render(){
   const r=route();
+  // Leaving a profile invalidates the other-person cache so returning re-fetches once
+  // ("fetch once per visit"). Background snapshot re-renders keep r.view==="user", so they
+  // reuse the cache instead of re-fetching on every list change anyone makes.
+  if(r.view!=="user"){ profUid=null; profEntries=null; profLoading=null; }
   if(pracPlaying && r.view!=="scales") pracStop();
   if(r.view!=="song" && detachNotes){ detachNotes(); detachNotes=null; notesSongId=null; currentNotes=[]; }
   // NB: lastSpinPick intentionally persists across navigation so returning to the
