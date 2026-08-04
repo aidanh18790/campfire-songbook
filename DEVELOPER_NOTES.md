@@ -807,3 +807,40 @@ or windowing/virtualization; deferred until confirmed necessary to avoid prematu
 
 **Files:** `app.js` (`rerender()` guard), `sw.js` (cache **v40 -> v41**). `style.css` / `index.html`
 unchanged.
+
+## 34. Personal "My notes" vanish after closing the iOS Home Screen PWA (v42)
+
+**Symptom:** On an iPhone/iPad with the app added to the Home Screen, a personal note ("My notes"
+box) showed "Saved," survived tapping around within the session, but was gone after the app was
+fully closed and reopened. Ratings/statuses were unaffected.
+
+**Not the cause (ruled out in order):**
+- *Security rules.* Rules are a single recursive wildcard `match /{document=**} { allow read, write:
+  if true; }`, which DOES cover `songs/{songId}/notes/{uid}`. No subcollection gap.
+- *Read-back bug.* The notes `onSnapshot` read path is shared with "Everyone's notes" and works.
+
+**Root cause:** Firestore was initialized with `persistentLocalCache({ tabManager:
+persistentMultipleTabManager() })`. The multi-tab manager relies on cross-tab coordination locks
+that iOS standalone (Home Screen) WebKit doesn't support reliably. When its init throws, the existing
+`catch` fell back to `getFirestore(app)` — a **memory-only** cache with **no durable write queue**.
+So a note write lived only in RAM: shown as "Saved" from the in-memory copy, then lost when iOS
+killed the backgrounded PWA before the background sync to the server completed. Ratings usually
+survived only because the user lingered long enough after setting them for the sync to land.
+
+**Fix:** Switch to `persistentSingleTabManager(undefined)`. A Home Screen PWA is always a single
+instance, so multi-tab coordination is pure downside; single-tab persistence initializes reliably on
+iOS and provides a durable IndexedDB mutation queue that replays pending writes on next launch. This
+keeps offline saves working (the write is durably queued, not gated on a live server round-trip),
+which matters for a campfire app used where signal is poor.
+
+**Why not gate "Saved" on server ack** (e.g. `waitForPendingWrites`): that would hang the "Saved"
+confirmation while offline, breaking note-taking without signal. Durable persistence is the right
+lever — it lets the write queue survive and sync later.
+
+**If notes still drop after this:** confirm in the Firebase console (`campfire-ed6f3`) whether the
+note doc actually lands at `songs/{songId}/notes/{recovery-code}` after a normal session. If it does
+not, the write still isn't reaching the server (deeper iOS IndexedDB eviction) and the next lever is
+confirming a server write on save for this one field while keeping the offline queue.
+
+**Files:** `app.js` (Firestore cache init: multi-tab -> single-tab), `sw.js` (cache **v41 -> v42**).
+`style.css` / `index.html` unchanged.

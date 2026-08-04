@@ -15,7 +15,13 @@ const { initializeApp } = await import(`${FB_SDK}/firebase-app.js`);
 const F = await import(`${FB_SDK}/firebase-firestore.js`);
 const app = initializeApp(firebaseConfig);
 let db;
-try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
+// Single-tab persistence: a Home Screen PWA is always a single instance, and the multi-tab
+// manager's cross-tab coordination locks fail to initialize reliably in iOS standalone WebKit.
+// When that init throws, the old code fell back to getFirestore() = a MEMORY-ONLY cache with no
+// durable write queue, so a note typed and then closed on (before the background sync finished)
+// was lost on app kill. Single-tab persistence initializes reliably on iOS and gives a durable
+// IndexedDB mutation queue that replays on next launch.
+try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentSingleTabManager(undefined) }) }); }
 catch(e){ console.warn("cache fallback", e); db = F.getFirestore(app); }
 
 /* ---------- helpers ---------- */
