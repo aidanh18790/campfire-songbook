@@ -808,39 +808,49 @@ or windowing/virtualization; deferred until confirmed necessary to avoid prematu
 **Files:** `app.js` (`rerender()` guard), `sw.js` (cache **v40 -> v41**). `style.css` / `index.html`
 unchanged.
 
-## 34. Personal "My notes" vanish after closing the iOS Home Screen PWA (v42)
+## 34. Personal "My notes" render blank on every app reopen (they were never lost) (v43)
 
-**Symptom:** On an iPhone/iPad with the app added to the Home Screen, a personal note ("My notes"
-box) showed "Saved," survived tapping around within the session, but was gone after the app was
-fully closed and reopened. Ratings/statuses were unaffected.
+**Reported symptom:** On the iOS Home Screen PWA, a personal note ("My notes" box) showed "Saved,"
+survived tapping around within a session, but was blank after fully closing and reopening the app.
+Ratings/statuses were fine.
 
-**Not the cause (ruled out in order):**
-- *Security rules.* Rules are a single recursive wildcard `match /{document=**} { allow read, write:
-  if true; }`, which DOES cover `songs/{songId}/notes/{uid}`. No subcollection gap.
-- *Read-back bug.* The notes `onSnapshot` read path is shared with "Everyone's notes" and works.
+**The clue that cracked it:** the user retyped a "lost" note *exactly* and the **Save button grayed
+out**. Save disables only when the box text equals the loaded baseline (`orig = myNoteText`). So the
+app already held the old note as its baseline — meaning it **had** saved to the server and loaded
+back on open. The note was never lost; it was being rendered invisible.
 
-**Root cause:** Firestore was initialized with `persistentLocalCache({ tabManager:
-persistentMultipleTabManager() })`. The multi-tab manager relies on cross-tab coordination locks
-that iOS standalone (Home Screen) WebKit doesn't support reliably. When its init throws, the existing
-`catch` fell back to `getFirestore(app)` — a **memory-only** cache with **no durable write queue**.
-So a note write lived only in RAM: shown as "Saved" from the in-memory copy, then lost when iOS
-killed the backgrounded PWA before the background sync to the server completed. Ratings usually
-survived only because the user lingered long enough after setting them for the sync to land.
+**Root cause (a render bug, NOT a save/persistence bug):** personal notes load via a per-song
+`onSnapshot` that fires *after* the first render. Sequence on reopen:
+1. First render of the song: `myPersonalNotes[id]` is undefined and `currentNotes` is empty, so
+   `myNoteText=""` → empty textarea. (`lastSong!==id` here, so the restore block is skipped.)
+2. The notes listener fires, sets `myPersonalNotes[id]=<saved note>`, and calls `renderSong` again.
+3. Second render: the textarea is correctly rendered *with* the note — but the restore block
+   (`if(lastSong===id)`) then ran `el.value=_cap.mine`, and `_cap.mine` was the empty string
+   captured from step 1's DOM. That **overwrote the just-loaded note back to blank**, while the
+   `orig` baseline was set to the real note. Hence: blank box, but retyping the note grays out Save.
 
-**Fix:** Switch to `persistentSingleTabManager(undefined)`. A Home Screen PWA is always a single
-instance, so multi-tab coordination is pure downside; single-tab persistence initializes reliably on
-iOS and provides a durable IndexedDB mutation queue that replays pending writes on next launch. This
-keeps offline saves working (the write is durably queued, not gated on a live server round-trip),
-which matters for a campfire app used where signal is poor.
+That `_cap.mine` restore exists to protect *in-progress typing* from being wiped when a background
+Firestore change forces a re-render. It couldn't distinguish "empty because the user cleared it"
+from "empty because the note hasn't loaded yet," so it clobbered the freshly-loaded note. This also
+explains why notes survived *within* a session (once `myPersonalNotes[id]` is populated, later
+renders have the note synchronously and `_cap.mine` is non-empty, so nothing gets clobbered) and why
+ratings were unaffected (they render synchronously from `myLists`, no async-load-then-clobber gap).
 
-**Why not gate "Saved" on server ack** (e.g. `waitForPendingWrites`): that would hang the "Saved"
-confirmation while offline, breaking note-taking without signal. Durable persistence is the right
-lever — it lets the write queue survive and sync later.
+**Fix:** gate the restore so a captured value is only reapplied when it's worth protecting — the
+field is focused (active typing) or the capture is non-empty (typed, then tapped a rating before
+saving). An empty capture from an unfocused box is treated as "not loaded yet," and the freshly
+rendered `myNoteText` is left in place. Same guard applied to the arrangement-note (`diffnote`)
+restore for consistency (lower risk there since `diffNote` loads synchronously from `myLists`).
 
-**If notes still drop after this:** confirm in the Firebase console (`campfire-ed6f3`) whether the
-note doc actually lands at `songs/{songId}/notes/{recovery-code}` after a normal session. If it does
-not, the write still isn't reaching the server (deeper iOS IndexedDB eviction) and the next lever is
-confirming a server write on save for this one field while keeping the offline queue.
+**Correction to entry log:** a prior pass suspected iOS multi-tab persistence dropping the write and
+switched the Firestore cache to `persistentSingleTabManager`. This symptom disproved that theory (the
+note was on the server), so that change was **reverted** — the cache is back to
+`persistentMultipleTabManager()`. If a genuine multi-tab/persistence hardening is ever wanted, do it
+as a deliberate, separately verified change, not as a fix for this bug.
 
-**Files:** `app.js` (Firestore cache init: multi-tab -> single-tab), `sw.js` (cache **v41 -> v42**).
-`style.css` / `index.html` unchanged.
+**If a note still renders blank after this:** confirm in the Firebase console whether the doc exists
+at `songs/{songId}/notes/{recovery-code}`. If it exists but still shows blank, the restore guard
+missed a path; if it doesn't exist, that's a separate (real) save-side issue to chase then.
+
+**Files:** `app.js` (note/diff restore guard in `renderSong`; persistence init reverted to multi-tab),
+`sw.js` (cache **v41 -> v43**). `style.css` / `index.html` unchanged.

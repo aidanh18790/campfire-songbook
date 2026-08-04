@@ -15,13 +15,7 @@ const { initializeApp } = await import(`${FB_SDK}/firebase-app.js`);
 const F = await import(`${FB_SDK}/firebase-firestore.js`);
 const app = initializeApp(firebaseConfig);
 let db;
-// Single-tab persistence: a Home Screen PWA is always a single instance, and the multi-tab
-// manager's cross-tab coordination locks fail to initialize reliably in iOS standalone WebKit.
-// When that init throws, the old code fell back to getFirestore() = a MEMORY-ONLY cache with no
-// durable write queue, so a note typed and then closed on (before the background sync finished)
-// was lost on app kill. Single-tab persistence initializes reliably on iOS and gives a durable
-// IndexedDB mutation queue that replays on next launch.
-try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentSingleTabManager(undefined) }) }); }
+try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
 catch(e){ console.warn("cache fallback", e); db = F.getFirestore(app); }
 
 /* ---------- helpers ---------- */
@@ -646,9 +640,14 @@ function renderSong(id){
   root.innerHTML=chrome(inner,"home");
   if(lastSong===id){
     {const w=document.querySelector(".wrap");if(w)w.scrollTop=_cap.wrapScroll;}   // don't jump to top on a re-render (rating, arrangement, etc.)
-    if(_cap.mine!=null){const el=$("mynotes");if(el){el.value=_cap.mine;const sm=$("savemine");if(sm)sm.disabled=(el.value.trim()===myNoteText.trim());}}
+    // Only reapply a captured note-box value when it's worth protecting: the field is focused
+    // (active typing) or the capture is non-empty (typed, then tapped a rating before saving).
+    // An EMPTY capture from an unfocused box is the "note hasn't loaded from Firestore yet" case —
+    // reapplying it would wipe the note the listener just loaded back to blank (the invisible-note
+    // bug). In that case we let the freshly-rendered myNoteText stand.
+    if(_cap.mine!=null && (_cap.focus==="mynotes" || _cap.mine!=="")){const el=$("mynotes");if(el){el.value=_cap.mine;const sm=$("savemine");if(sm)sm.disabled=(el.value.trim()===myNoteText.trim());}}
     if(_cap.mineEx){const el=$("mynotes");if(el){el.classList.add("expanded");const t=document.querySelector('[data-expand="mynotes"]');if(t)t.textContent="Collapse";}}
-    if(_cap.diff!=null){const el=$("diffnote");if(el){el.value=_cap.diff;const sd=$("savediff");if(sd)sd.disabled=(el.value.trim()===e.diffNote.trim());}}
+    if(_cap.diff!=null && (_cap.focus==="diffnote" || _cap.diff!=="")){const el=$("diffnote");if(el){el.value=_cap.diff;const sd=$("savediff");if(sd)sd.disabled=(el.value.trim()===e.diffNote.trim());}}
     if(_cap.focus){const el=$(_cap.focus);if(el){el.focus();if(_cap.sel!=null){try{el.setSelectionRange(_cap.sel,_cap.sel);}catch(e){}}}}
   }
   lastSong=id;
