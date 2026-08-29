@@ -953,3 +953,18 @@ already the new value — same lag-free behavior `openEditSong` already relies o
 row, new state `lastLyricsId`/`lyricsEditing`), `style.css` (`.lyricsrow`, `.lyricsview`,
 `.lyricsempty`, `.lyrnote`, `textarea.lyricsedit`, `.lyricsbtnrow`, `.lyricscancel`),
 `sw.js` (cache **v46 -> v47**). `index.html` unchanged.
+
+## 37. Lyrics view: smaller font + tighter paragraph spacing to fit more on screen (v48)
+
+Tuned the read-only `.lyricsview` display from #36 to show more of a song at once: font-size down
+from 15.5px to 13.5px, line-height down from 1.65 to 1.42.
+
+Paragraph (verse/chorus) spacing is now independent of line-height rather than riding on it: the
+raw lyrics text is split on blank lines (`\n{2,}`) into separate `<p>` blocks in a new
+`formatLyrics(text)` helper (single newlines within a block still become `<br>`), and each `<p>`
+gets a small `margin-bottom: .55em` in CSS. Previously every newline — including paragraph breaks —
+became a bare `<br>`, so the gap between verses scaled with `line-height` and couldn't be tuned
+separately from in-line spacing. Escaping still happens per-paragraph via the existing `esc()`.
+
+**Files:** `app.js` (new `formatLyrics`, `renderLyrics` view-mode body), `style.css`
+(`.lyricsview` font-size/line-height, new `.lyricsview p`), `sw.js` (cache **v47 -> v48**).

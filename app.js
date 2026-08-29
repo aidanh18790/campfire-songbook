@@ -755,6 +755,12 @@ function renderSong(id){
 // restore guard as the personal-notes and difficulty-note fields: a background song-doc
 // change (someone else saving lyrics, a genre edit, etc.) triggers a full render() while
 // you're mid-edit, and without this guard that would wipe your in-progress typing.
+// Splits lyrics on blank lines into paragraphs (verses/choruses), so paragraph spacing can be
+// tuned independently of the font's line-height — a single blank line in the source becomes one
+// paragraph break, not a variable-height gap that scales with line-height like a bare <br><br> would.
+function formatLyrics(text){
+  return text.trim().split(/\n{2,}/).map(para=>`<p>${esc(para).replace(/\n/g,"<br>")}</p>`).join("");
+}
 function renderLyrics(id){
   const s=songsMap[id];
   if(!s){ root.innerHTML=chrome(`<button class="back" data-go="/">&larr; Back</button><div class="empty"><div class="big">Song not found</div>It may have been removed.</div>`,"home"); return; }
@@ -769,7 +775,7 @@ function renderLyrics(id){
     ? `<textarea class="notes lyricsedit" id="lyricsedit" placeholder="Paste or type the lyrics here&hellip;">${esc(text)}</textarea>
        <div class="lyricsbtnrow"><button class="savenote" id="savelyrics">Save lyrics</button><button class="lyricscancel" id="cancellyrics">Cancel</button><span class="savedmsg" id="lyricssaved"></span></div>`
     : (text
-        ? `<div class="lyricsview">${esc(text).replace(/\n/g,"<br>")}</div><button class="edit-pencil" id="editlyrics">Edit lyrics</button>`
+        ? `<div class="lyricsview">${formatLyrics(text)}</div><button class="edit-pencil" id="editlyrics">Edit lyrics</button>`
         : `<div class="lyricsempty">No lyrics yet.</div><button class="savenote" id="editlyrics">Add lyrics</button>`);
   const inner=`
     <button class="back" data-back="1">&larr; ${esc(s.title)}</button>
