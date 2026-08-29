@@ -987,3 +987,11 @@ narrower `lyricssection` wrapper around it.
 
 **Files:** `style.css` (new `.lyricssection`, `.lyricsview` sizing), `app.js` (`renderLyrics`
 section class), `sw.js` (cache **v48 -> v49**).
+
+## 39. Lyrics view: v49's 12px was too small — bumped back up (v50)
+
+`.lyricsview` font-size 12px -> 14px, line-height 1.32 -> 1.4. Paragraph gap (.4em) and the
+narrower `lyricssection` side padding from #38 are unchanged — just the text size was walked back
+after feedback that v49 went too far.
+
+**Files:** `style.css` (`.lyricsview`), `sw.js` (cache **v49 -> v50**).
