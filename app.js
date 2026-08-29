@@ -367,6 +367,32 @@ async function saveDiffNote(songId,note){
 }
 
 /* ============================================================
+   ONE-TIME MIGRATION: backfill learnedAt on pre-v44 entries
+   ============================================================ */
+let _migrated=false;
+async function migrateLearnedAt(){
+  if(_migrated) return;
+  const key="campfire_migrated_learnedAt_"+me.uid;
+  if(localStorage.getItem(key)) { _migrated=true; return; }
+  _migrated=true;  // prevent re-entry even if something throws
+  const ids=Object.entries(myLists)
+    .filter(([,v])=>v.status==='known' && !v.learnedAt)
+    .map(([id,v])=>({id,addedAt:v.addedAt}));
+  if(!ids.length){ localStorage.setItem(key,"1"); return; }
+  console.log(`[migration] backfilling learnedAt on ${ids.length} known entries`);
+  const batch=F.writeBatch(db);
+  ids.forEach(({id,addedAt})=>{
+    const ref=F.doc(db,"users",me.uid,"lists",id);
+    // Use the entry's addedAt (= "day it was added to the list") when available;
+    // otherwise fall back to now, since there's no better date to recover.
+    batch.update(ref,{learnedAt: addedAt || F.serverTimestamp()});
+  });
+  try{ await batch.commit(); console.log("[migration] learnedAt backfill done"); }
+  catch(e){ console.warn("[migration] learnedAt backfill failed, will retry next session",e); _migrated=false; return; }
+  localStorage.setItem(key,"1");
+}
+
+/* ============================================================
    LISTENERS
    ============================================================ */
 function startListeners(){
@@ -374,7 +400,7 @@ function startListeners(){
   F.onSnapshot(F.query(F.collection(db,"songs"),F.orderBy("sortKey","asc")),snap=>{
     songs=snap.docs.map(d=>({id:d.id,...d.data()})); songsMap={}; songs.forEach(s=>songsMap[s.id]=s); rerender();
   },err=>{ console.error("songs",err); root.innerHTML=`<div class="wrap"><div class="empty"><div class="big">Can&rsquo;t reach the songbook</div>Make sure your Firestore rules allow read &amp; write (see setup note).</div></div>`; });
-  F.onSnapshot(F.collection(db,"users",me.uid,"lists"),snap=>{ myLists={}; snap.docs.forEach(d=>myLists[d.id]=d.data()); rerender(); });
+  F.onSnapshot(F.collection(db,"users",me.uid,"lists"),snap=>{ myLists={}; snap.docs.forEach(d=>myLists[d.id]=d.data()); rerender(); migrateLearnedAt(); });
   F.onSnapshot(F.collection(db,"users"),snap=>{ usersMap={}; snap.docs.forEach(d=>usersMap[d.id]=d.data()); rerender(); });
   // Everyone's list entries (for supply/demand). Path: users/{uid}/lists/{songId}
   F.onSnapshot(F.collectionGroup(db,"lists"),snap=>{

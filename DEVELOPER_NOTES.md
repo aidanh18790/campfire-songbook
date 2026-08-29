@@ -894,5 +894,14 @@ falling all the way to the song's raw `sortKey` directly). New sort button "Rece
 to the personal sortbar, positioned right after "Date added".
 
 **Files:** `app.js` (`myEntry`, `writeEntry`, new `setLearnedDate`, `dateInputVal`, `fmtDateShort`,
-`renderSong` date-learned UI + capture/restore + click wiring, `paintUser` sort logic + button),
-`style.css` (`.learnedrow`, `.dateinput`), `sw.js` (cache **v43 -> v44**). `index.html` unchanged.
+`renderSong` date-learned UI + capture/restore + click wiring, `paintUser` sort logic + button,
+`migrateLearnedAt` one-time backfill), `style.css` (`.learnedrow`, `.dateinput`),
+`sw.js` (cache **v43 -> v44**). `index.html` unchanged.
+
+**One-time migration (`migrateLearnedAt`):** on the first myLists snapshot after boot, if the
+localStorage flag `campfire_migrated_learnedAt_{uid}` is absent, the migration scans every entry
+with `status === 'known'` and no `learnedAt`, and batch-updates them. It copies the entry's existing
+`addedAt` when available (= "the day it was added to the list"), falling back to `serverTimestamp()`
+(now) for legacy entries that predate `addedAt`. The flag is per-user and per-device; if the batch
+commit fails (offline, etc.) the flag isn't set, so it retries next session. The in-memory
+`_migrated` guard prevents re-entry from subsequent snapshot callbacks within the same session.
