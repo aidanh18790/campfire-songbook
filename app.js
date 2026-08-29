@@ -782,7 +782,7 @@ function renderLyrics(id){
     <div class="dhead">
       <div class="dtitle">${esc(s.title)}</div><div class="dartist">${esc(s.artist)}</div>
     </div>
-    <div class="section">
+    <div class="section lyricssection">
       <h3>Lyrics</h3>
       <p class="lyrnote">Shared with everyone &mdash; anyone can edit these.</p>
       ${body}

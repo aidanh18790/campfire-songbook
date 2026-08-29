@@ -232,8 +232,9 @@
   .lyricsrow-text{flex:1;min-width:0;color:var(--muted);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .lyricsrow-chev{flex:0 0 auto;color:var(--faint);font-size:20px;line-height:1;}
   .lyrnote{color:var(--faint);font-size:12.5px;margin:-4px 0 14px;}
-  .lyricsview{white-space:pre-wrap;line-height:1.42;font-size:13.5px;color:var(--cream);margin-bottom:14px;word-break:break-word;}
-  .lyricsview p{margin:0 0 .55em;}
+  .lyricssection{padding-left:8px;padding-right:8px;}
+  .lyricsview{white-space:pre-wrap;line-height:1.32;font-size:12px;color:var(--cream);margin-bottom:14px;word-break:break-word;}
+  .lyricsview p{margin:0 0 .4em;}
   .lyricsview p:last-child{margin-bottom:0;}
   .lyricsempty{color:var(--faint);font-size:14px;margin-bottom:14px;}
   textarea.lyricsedit{height:50vh;min-height:280px;}

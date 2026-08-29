@@ -968,3 +968,22 @@ separately from in-line spacing. Escaping still happens per-paragraph via the ex
 
 **Files:** `app.js` (new `formatLyrics`, `renderLyrics` view-mode body), `style.css`
 (`.lyricsview` font-size/line-height, new `.lyricsview p`), `sw.js` (cache **v47 -> v48**).
+
+## 38. Lyrics view: narrower side padding + smaller text for longer lines per row (v49)
+
+Two more density tweaks on top of #37, still scoped to the lyrics page only:
+
+- The Lyrics `.section` on the lyrics page now carries an extra `lyricssection` modifier class
+  that overrides its horizontal padding down to 8px (from the shared `.section` default of 16px).
+  This only affects the lyrics page's own section — every other `.section` elsewhere (Listen, My
+  lists, Difficulty, etc.) is untouched. Note the outer `.wrap` page padding (18px each side) is
+  unchanged and shared by every page, so there's still some inset from the true screen edge, but
+  the card itself now hugs much closer to it.
+- `.lyricsview` font-size down 13.5px -> 12px, line-height 1.42 -> 1.32, paragraph gap .55em -> .4em.
+
+The edit-mode `textarea.lyricsedit` was deliberately left at its existing padding/font-size —
+comfortable typing room matters more there than line density, and it still benefits from the
+narrower `lyricssection` wrapper around it.
+
+**Files:** `style.css` (new `.lyricssection`, `.lyricsview` sizing), `app.js` (`renderLyrics`
+section class), `sw.js` (cache **v48 -> v49**).
