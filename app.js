@@ -158,7 +158,7 @@ let sortMode="added", sortDir="desc";  // added|known|todo|difficulty ; desc|asc
 let collapsed={known:false,todo:false,learning:false,starred:false};
 // Personal-page filters/sorters — mirror the home page but kept independent so filtering
 // your own lists never changes the main page (and vice versa). Reset when you switch people.
-let uQuery="", userGenresInc=new Set(), userGenresExc=new Set(), uSort="added", uSortDir="desc";
+let uQuery="", userGenresInc=new Set(), userGenresExc=new Set(), uSort="learned", uSortDir="desc";
 let uStarOnly=false;           // personal page: show only this person's starred songs
 let uFiltersOpen=false;        // personal page: whether the genre + starred filter panel is expanded
 let scrollMem={};              // remembers each list view's scroll so leaving/returning doesn't jump to top
@@ -755,7 +755,7 @@ function listItem(s,starred,difficulty){
 }
 async function renderUser(uid){
   if(!uid){ root.innerHTML=chrome(`<div class="empty"><div class="big">No user</div></div>`,"user"); return; }
-  if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="added"; uSortDir="desc"; uStarOnly=false; uFiltersOpen=false; lastUserView=uid; }
+  if(lastUserView!==uid){ uQuery=""; userGenresInc.clear(); userGenresExc.clear(); uSort="learned"; uSortDir="desc"; uStarOnly=false; uFiltersOpen=false; lastUserView=uid; }
   const isMe=uid===me.uid;
   // Your own profile reads the always-live myLists (kept fresh by its onSnapshot), so no
   // fetch is needed and self-edits show instantly. Other people's lists are fetched once
@@ -887,7 +887,7 @@ function paintUser(uid, entries){
   const controls=`<div class="homectl" style="margin-top:8px">
       <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
         <input id="usearch" type="text" placeholder="Search ${isMe?"your":esc(pname)+"\u2019s"} lists&hellip;" autocomplete="off" value="${esc(uQuery)}"></div>
-      <div class="ctlbar">${uFilterToggle}<div class="sortbar" id="usortbar">${uSortBtn("added")}${uSortBtn("learned")}${uSortBtn("difficulty")}${uSortBtn("known")}${uSortBtn("todo")}</div></div>
+      <div class="ctlbar">${uFilterToggle}<div class="sortbar" id="usortbar">${uSortBtn("learned")}${uSortBtn("difficulty")}${uSortBtn("known")}${uSortBtn("todo")}</div></div>
       <div class="filterpanel ${uFiltersOpen?'open':''}" id="ufilterpanel">
         ${ugChips}
         ${starFilterRow}
