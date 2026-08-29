@@ -157,6 +157,12 @@
   .sbtn.todo.on{background:var(--todo);color:#241a06;border-color:transparent;}
   .sbtn.known.on{background:var(--known);color:#14210b;border-color:transparent;}
   .sbtn.learning.on{background:var(--learning);color:#062730;border-color:transparent;}
+  /* date-learned editor, under the status buttons on the song page */
+  .learnedrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;}
+  .learnedrow .llabel{color:var(--muted);font-size:13.5px;font-weight:600;}
+  .learnedrow.ro .lval{color:var(--cream);font-size:13.5px;font-weight:600;}
+  input.txt.dateinput{width:auto;padding:9px 12px;font-size:14.5px;color-scheme:dark;}
+  .learnedrow .savenote{margin-top:0;}
   /* interactive difficulty rater (song page + roulette) — half-steps via left/right tap zones */
   .diffrater{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
   .dsegs{display:inline-flex;gap:6px;}

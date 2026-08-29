@@ -854,3 +854,45 @@ missed a path; if it doesn't exist, that's a separate (real) save-side issue to 
 
 **Files:** `app.js` (note/diff restore guard in `renderSong`; persistence init reverted to multi-tab),
 `sw.js` (cache **v41 -> v43**). `style.css` / `index.html` unchanged.
+
+## 35. "Recently learned" personal sort + editable date-learned (v44)
+
+**What was added:** a new `learnedAt` field on `users/{uid}/lists/{songId}` entries, marking when a
+song was learned (i.e. entered Currently Know). It powers a new "Recently learned" sort button on
+the personal page, and is user-editable via a date picker on the song page.
+
+**Default value — "the day it was added to that list":** `learnedAt` is auto-stamped in `writeEntry`
+the first time an entry's status transitions into `'known'` (whether from a brand-new entry or from
+`todo`/`learning`), using the exact same "stamp once, never move" philosophy as `addedAt`. Once
+stamped, later edits (starring, re-rating, even leaving and re-entering Currently Know) all preserve
+the existing value — it does **not** reset if the song is moved out of Know and back in, matching how
+`difficulty`/`diffNote` already survive a status round-trip. This was a judgment call, not something
+explicitly requested — flagging it in case a "reset when re-learned" behavior is ever wanted instead.
+
+**Editable date:** a `<input type="date">` on the song page, next to the status buttons, editable
+only while the song is in Currently Know (same rule as the difficulty rater — a saved date on a
+non-known song is shown read-only via `.learnedrow.ro`, same pattern as the difficulty ratelock).
+Saving calls the new `setLearnedDate(songId, dateStr)`, which passes an explicit `Date` into
+`writeEntry` — an explicit `learnedAt` argument always overrides the auto-stamp/preserve logic.
+Date-only strings are parsed at local noon (`dateStr+"T12:00:00"`) to avoid the picked day rolling
+back by one when converted to/from UTC near midnight in US timezones. Display formatting for both
+the input's `value` and the read-only fallback goes through new helpers `dateInputVal(ms)` (yyyy-mm-dd,
+timezone-corrected) and `fmtDateShort(ms)`.
+
+**Render-timing guard:** since the song page fully re-renders on every `myLists` snapshot (background
+changes from rating/starring elsewhere), the date input gets the same capture-restore protection as
+`diffnote` (see #34) so an unsaved pick in the picker survives a background re-render. Unlike the
+free-text note guard, "empty" isn't the right signal for a date field (a loaded value is normally
+non-empty already) — instead the capture is reapplied whenever it differs from what the fresh render
+just computed from Firestore, which only happens when the user changed it locally and hasn't saved.
+
+**Sort logic:** `paintUser`'s `uCmp` gained a `"learned"` branch alongside the existing `"added"` one,
+backed by a new `entLearnedAt(id)` helper that mirrors `entAddedAt`'s fallback chain (resolved
+timestamp → "now" for a pending write → **falls through to `entAddedAt`** for songs with no
+`learnedAt` at all, i.e. never known, or a known entry from before this field existed — rather than
+falling all the way to the song's raw `sortKey` directly). New sort button "Recently learned" added
+to the personal sortbar, positioned right after "Date added".
+
+**Files:** `app.js` (`myEntry`, `writeEntry`, new `setLearnedDate`, `dateInputVal`, `fmtDateShort`,
+`renderSong` date-learned UI + capture/restore + click wiring, `paintUser` sort logic + button),
+`style.css` (`.learnedrow`, `.dateinput`), `sw.js` (cache **v43 -> v44**). `index.html` unchanged.

@@ -109,6 +109,10 @@ function colorOf(uid,fallback){ return (usersMap[uid]&&usersMap[uid].color)||fal
 // Firestore Timestamp -> milliseconds (0 if missing). Used to sort a person's lists by
 // when a song was added to THEIR list (not when it joined the songbook).
 function tsMillis(ts){ if(!ts) return 0; if(typeof ts.toMillis==="function") return ts.toMillis(); if(typeof ts.seconds==="number") return ts.seconds*1000; return 0; }
+// yyyy-mm-dd in LOCAL time for <input type="date"> (its value is a plain calendar date with
+// no timezone, so a naive toISOString() would shift the day near midnight in most US zones).
+function dateInputVal(ms){ if(!ms) return ""; const d=new Date(ms); const tz=d.getTimezoneOffset()*60000; return new Date(ms-tz).toISOString().slice(0,10); }
+function fmtDateShort(ms){ if(!ms) return ""; return new Date(ms).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}); }
 
 /* ---------- seed ---------- */
 function seedRows(){
@@ -275,11 +279,11 @@ async function savePersonalNote(songId,text){
   if(text.trim()) await F.setDoc(ref,{text:text.trim(),name:me.name,color:me.color,uid:me.uid,updatedAt:F.serverTimestamp()});
   else await F.deleteDoc(ref).catch(()=>{});
 }
-function myEntry(id){ const e=myLists[id]; return {status:(e&&e.status)||null,starred:!!(e&&e.starred),difficulty:(e&&e.difficulty)||null,diffNote:(e&&e.diffNote)||"",featured:!!(e&&e.featured)}; }
+function myEntry(id){ const e=myLists[id]; return {status:(e&&e.status)||null,starred:!!(e&&e.starred),difficulty:(e&&e.difficulty)||null,diffNote:(e&&e.diffNote)||"",featured:!!(e&&e.featured),learnedAt:(e&&e.learnedAt)||null}; }
 function learningCount(){ return Object.values(myLists).filter(v=>v && v.status==='learning').length; }
 // One place that writes (or deletes) the current user's entry for a song. The doc is
 // kept alive if it carries a status, a star, OR a difficulty rating; otherwise removed.
-async function writeEntry(songId,{status,starred,difficulty,diffNote,featured}){
+async function writeEntry(songId,{status,starred,difficulty,diffNote,featured,learnedAt}){
   const ref=F.doc(db,"users",me.uid,"lists",songId);
   const note=(diffNote||"").trim();
   if(!status && !starred && !difficulty){ await F.deleteDoc(ref).catch(()=>{}); return; }
@@ -296,7 +300,28 @@ async function writeEntry(songId,{status,starred,difficulty,diffNote,featured}){
   // to the song's own order for those) rather than being pinned to "now" on its first edit.
   if(prev&&prev.addedAt){ data.addedAt=prev.addedAt; }
   else if(!prev){ data.addedAt=F.serverTimestamp(); }
+  // learnedAt marks when this song was learned (i.e. when it entered Currently Know). Same
+  // "stamp once, then never move" philosophy as addedAt, but scoped to the known transition
+  // rather than the list overall — and unlike addedAt it's user-editable (the date-learned
+  // picker on the song page). Three cases: (1) an explicit override was passed (the picker
+  // was used) — that always wins; (2) a stamp already exists — preserve it untouched, even
+  // if the song later leaves and re-enters Currently Know, same as difficulty persisting;
+  // (3) this is the song's first-ever transition into 'known' — default-stamp it to now,
+  // i.e. "the day it was added to that list".
+  if(learnedAt!==undefined){ data.learnedAt = learnedAt===null ? null : F.Timestamp.fromDate(new Date(learnedAt)); }
+  else if(prev&&prev.learnedAt){ data.learnedAt=prev.learnedAt; }
+  else if(status==='known' && (!prev||prev.status!=='known')){ data.learnedAt=F.serverTimestamp(); }
   await F.setDoc(ref,data);
+}
+// Manually set (or backdate) the date-learned stamp. Only editable while the song is
+// currently in Know (mirrors the difficulty-rating rule) so the field always reflects an
+// active, current entry rather than a stale one from a status the song has since left.
+async function setLearnedDate(songId,dateStr){
+  const cur=myEntry(songId);
+  if(cur.status!=='known'||!dateStr) return;
+  const d=new Date(dateStr+"T12:00:00");   // noon local avoids the date rolling back a day across timezones
+  if(isNaN(d.getTime())) return;
+  await writeEntry(songId,{status:cur.status,starred:cur.starred,difficulty:cur.difficulty,diffNote:cur.diffNote,learnedAt:d});
 }
 // Returns false if the change was blocked (Currently Learning full), true otherwise.
 async function setStatus(songId,status){
@@ -615,7 +640,10 @@ function renderSong(id){
       <button class="sbtn todo ${e.status==='todo'?'on':''}" data-set="todo" data-id="${id}">To-Do</button>
       <button class="sbtn learning ${e.status==='learning'?'on':''}" data-set="learning" data-id="${id}">Currently Learning</button>
       <button class="sbtn known ${e.status==='known'?'on':''}" data-set="known" data-id="${id}">Currently Know</button>
-      <button class="star ${e.starred?'on':''} ${known?'':'locked'}" data-star="${id}" aria-label="favorite" title="${known?'':'Add to Currently Know to star this'}">${starSvg(e.starred)}</button></div></div>
+      <button class="star ${e.starred?'on':''} ${known?'':'locked'}" data-star="${id}" aria-label="favorite" title="${known?'':'Add to Currently Know to star this'}">${starSvg(e.starred)}</button></div>
+      ${known?`<div class="learnedrow"><span class="llabel">Learned on</span><input class="txt dateinput" type="date" id="learnedat" max="${dateInputVal(Date.now())}" value="${dateInputVal(tsMillis(e.learnedAt))}"><button class="savenote" id="savelearned" disabled>Save</button><span class="savedmsg" id="learnedsaved"></span></div>`
+        :(e.learnedAt?`<div class="learnedrow ro"><span class="llabel">Learned on</span><span class="lval">${fmtDateShort(tsMillis(e.learnedAt))}</span></div>`:"")}
+    </div>
     <div class="section"><h3>Difficulty</h3>
       ${diffRater(id,e.difficulty,known)}
       ${known?"":`<div class="ratelock">${e.difficulty?"Your difficulty rating is saved &mdash; move this back to <b>Currently Know</b> to change it.":"You can rate how hard it is to play once it&rsquo;s in your <b>Currently Know</b> list."}</div>`}
@@ -635,6 +663,7 @@ function renderSong(id){
   const _cap={mine:(()=>{const el=$("mynotes");return el?el.value:null;})(),
     mineEx:(()=>{const el=$("mynotes");return el?el.classList.contains("expanded"):false;})(),
     diff:(()=>{const el=$("diffnote");return el?el.value:null;})(),
+    learned:(()=>{const el=$("learnedat");return el?el.value:null;})(),
     wrapScroll:(()=>{const w=document.querySelector(".wrap");return w?w.scrollTop:0;})(),
     focus:document.activeElement&&document.activeElement.id,sel:(document.activeElement&&typeof document.activeElement.selectionStart==='number')?document.activeElement.selectionStart:null};
   root.innerHTML=chrome(inner,"home");
@@ -648,6 +677,11 @@ function renderSong(id){
     if(_cap.mine!=null && (_cap.focus==="mynotes" || _cap.mine!=="")){const el=$("mynotes");if(el){el.value=_cap.mine;const sm=$("savemine");if(sm)sm.disabled=(el.value.trim()===myNoteText.trim());}}
     if(_cap.mineEx){const el=$("mynotes");if(el){el.classList.add("expanded");const t=document.querySelector('[data-expand="mynotes"]');if(t)t.textContent="Collapse";}}
     if(_cap.diff!=null && (_cap.focus==="diffnote" || _cap.diff!=="")){const el=$("diffnote");if(el){el.value=_cap.diff;const sd=$("savediff");if(sd)sd.disabled=(el.value.trim()===e.diffNote.trim());}}
+    // Date inputs aren't typed character-by-character like the text fields above, so an
+    // "empty capture" isn't the tell for "hasn't loaded yet" — instead, reapply whenever the
+    // capture differs from what the fresh render just computed from Firestore, meaning the
+    // user picked a date locally that hasn't been saved yet.
+    if(_cap.learned!=null){const el=$("learnedat");if(el&&_cap.learned!==el.value){el.value=_cap.learned;const sl=$("savelearned");if(sl)sl.disabled=(el.value===dateInputVal(tsMillis(e.learnedAt)));}}
     if(_cap.focus){const el=$(_cap.focus);if(el){el.focus();if(_cap.sel!=null){try{el.setSelectionRange(_cap.sel,_cap.sel);}catch(e){}}}}
   }
   lastSong=id;
@@ -670,6 +704,11 @@ function renderSong(id){
   if(dnote&&savediff){ const dorig=dnote.value;
     dnote.addEventListener("input",()=>{ savediff.disabled = dnote.value.trim()===dorig.trim(); });
     savediff.onclick=async()=>{ savediff.disabled=true; await saveDiffNote(id,dnote.value); const m=$("diffsaved"); if(m){m.textContent="Saved";setTimeout(()=>{const x=$("diffsaved");if(x)x.textContent="";},1500);} };
+  }
+  const lnote=$("learnedat"), savelearned=$("savelearned");
+  if(lnote&&savelearned){ const lorig=lnote.value;
+    lnote.addEventListener("input",()=>{ savelearned.disabled = lnote.value===lorig; });
+    savelearned.onclick=async()=>{ savelearned.disabled=true; await setLearnedDate(id,lnote.value); const m=$("learnedsaved"); if(m){m.textContent="Saved";setTimeout(()=>{const x=$("learnedsaved");if(x)x.textContent="";},1500);} };
   }
   $("delsong").onclick=async()=>{ const b=$("delsong");
     if(b.dataset.confirm){ await deleteSong(id); go("/"); }
@@ -744,9 +783,26 @@ function paintUser(uid, entries){
     const s=songsMap[id];                    // legacy entry: stable, unaffected by starring
     return (s&&s.sortKey)||0;
   };
+  // "Recently learned" = entLearnedAt, which reads the entry's learnedAt (stamped when the
+  // song first entered Currently Know, editable via the date-learned picker on the song
+  // page). A song that's never been known — or a known entry from before this field
+  // existed — falls back to entAddedAt, then the song's own stable order, same chain as
+  // the "added" sort above.
+  const entLearnedAt=id=>{
+    const v=entries[id]; if(!v) return 0;
+    const t=tsMillis(v.learnedAt);
+    if(t) return t;
+    if('learnedAt' in v) return Date.now();  // present but unresolved → brand-new write
+    return entAddedAt(id);
+  };
   const uCmp=(a,b)=>{
     if(uSort==="added"){
       const d=entAddedAt(a.s.id)-entAddedAt(b.s.id);
+      if(d!==0) return uSortDir==="asc"?d:-d;
+      return a.s.title.localeCompare(b.s.title);
+    }
+    if(uSort==="learned"){
+      const d=entLearnedAt(a.s.id)-entLearnedAt(b.s.id);
       if(d!==0) return uSortDir==="asc"?d:-d;
       return a.s.title.localeCompare(b.s.title);
     }
@@ -785,7 +841,7 @@ function paintUser(uid, entries){
   const ugChips = ugAll.length? `<div class="filters" id="ufilters"><button class="chip all ${(userGenresInc.size===0&&userGenresExc.size===0)?'on':''}" data-ugenre="__all">All</button>`+
     ugAll.map(g=>{const gi=userGenresInc.has(g),ge=userGenresExc.has(g);return `<button class="chip ${gi?'on':''} ${ge?'exc':''}" style="--gc:${gcolor(g)}" data-ugenre="${esc(g)}"><span class="dot"></span>${esc(g)}</button>`;}).join("")+`</div>` : "";
   const uArrow=m=> uSort!==m?"" : (uSortDir==="desc"?" \u2193":" \u2191");
-  const lbl={added:"Date added",known:"Most known",todo:"Most to-do",difficulty:"Difficulty"};
+  const lbl={added:"Date added",learned:"Recently learned",known:"Most known",todo:"Most to-do",difficulty:"Difficulty"};
   const uSortBtn=m=>`<button class="sortbtn ${uSort===m?'on':''}" data-usort="${m}">${lbl[m]}${uArrow(m)}</button>`;
   const uActive=(userGenresInc.size||userGenresExc.size||uQuery.trim()||uStarOnly);
   const uFilterCount=userGenresInc.size+userGenresExc.size+(uStarOnly?1:0);
@@ -805,7 +861,7 @@ function paintUser(uid, entries){
   const controls=`<div class="homectl" style="margin-top:8px">
       <div class="searchbar"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M16 16l-3.5-3.5"/></svg>
         <input id="usearch" type="text" placeholder="Search ${isMe?"your":esc(pname)+"\u2019s"} lists&hellip;" autocomplete="off" value="${esc(uQuery)}"></div>
-      <div class="ctlbar">${uFilterToggle}<div class="sortbar" id="usortbar">${uSortBtn("added")}${uSortBtn("difficulty")}${uSortBtn("known")}${uSortBtn("todo")}</div></div>
+      <div class="ctlbar">${uFilterToggle}<div class="sortbar" id="usortbar">${uSortBtn("added")}${uSortBtn("learned")}${uSortBtn("difficulty")}${uSortBtn("known")}${uSortBtn("todo")}</div></div>
       <div class="filterpanel ${uFiltersOpen?'open':''}" id="ufilterpanel">
         ${ugChips}
         ${starFilterRow}
