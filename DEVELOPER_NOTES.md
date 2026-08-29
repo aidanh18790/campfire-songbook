@@ -905,3 +905,51 @@ with `status === 'known'` and no `learnedAt`, and batch-updates them. It copies 
 (now) for legacy entries that predate `addedAt`. The flag is per-user and per-device; if the batch
 commit fails (offline, etc.) the flag isn't set, so it retries next session. The in-memory
 `_migrated` guard prevents re-entry from subsequent snapshot callbacks within the same session.
+
+## 36. Shared "Lyrics" page — one wiki-style copy per song, editable by everyone (v47)
+
+**What:** a new full-page Lyrics view, reached by tapping a "Lyrics" preview row on the song page.
+Unlike "My notes" or the difficulty arrangement note, there's exactly one copy of the lyrics per
+song — not one per person — and anyone in the group can edit it, same as the song's title/artist/
+genres.
+
+**Storage:** lyrics live in a new `lyrics` string field on the existing `songs/{songId}` document
+(alongside `title`, `artist`, `genres`). No new collection, no security-rule change: it's written
+through the same `saveSongFields(id, fields)` → `updateDoc` path `openEditSong` already uses, and
+read from the same live `songsMap` kept current by the existing `songs` collection `onSnapshot`
+(so a lyrics edit from someone else shows up on your song page/lyrics page the same way a title
+edit would).
+
+**Route:** `#/song/{id}/lyrics`, parsed as a third route view (`{view:"lyrics",id}`) alongside the
+existing `song`/`user`/etc. cases in `route()`, dispatched from `render()`. Reached via a normal
+`data-go` row on the song page (`<button class="lyricsrow" data-go="/song/{id}/lyrics">`) showing a
+one-line preview of the lyrics (or "No lyrics yet — tap to add"); left via the standard `data-back`
+button, which returns through browser history to the song page.
+
+**View vs. edit:** the page defaults to a **read-friendly display** (`.lyricsview`, `white-space:
+pre-wrap` so line breaks are preserved without a textarea's scrollbox) with a small "Edit lyrics"
+link, or a full-width "Add lyrics" button when the field is empty. Tapping either flips a local
+`lyricsEditing` flag and re-renders into an editable `<textarea id="lyricsedit">` with "Save
+lyrics" / "Cancel" buttons. `lyricsEditing` resets to `false` whenever `renderLyrics` is called for
+a *different* song id (`lastLyricsId !== id`), so leaving and returning to a song's lyrics always
+starts in view mode.
+
+**Render-timing guard:** the song-doc `onSnapshot` (any song's title/artist/genres/lyrics changing,
+by anyone) triggers a full `render()`, which would call `renderLyrics` again mid-edit. Applied the
+same capture-restore pattern used for `mynotes`/`diffnote` (#34) and the date-learned picker (#35):
+before overwriting `innerHTML`, capture the textarea's current value, focus state, and caret
+position; after re-rendering in edit mode, reapply the capture only if the field was focused
+(active typing) or the capture is non-empty (an unsaved edit sitting there unfocused) — otherwise
+the fresh value from the snapshot is left alone. Scroll position within the page is preserved the
+same way, gated on being the same song.
+
+Saving does **not** optimistically patch `songsMap` before the `updateDoc` resolves (unlike
+`savePersonalNote`, which patches the separate `myPersonalNotes` cache since that data doesn't
+have its own live listener the sheet can rely on). Firestore's local-cache snapshot fires before
+`updateDoc`'s promise resolves, so by the time the `await` returns, `songsMap[id].lyrics` is
+already the new value — same lag-free behavior `openEditSong` already relies on for title/artist.
+
+**Files:** `app.js` (`route`, `render` dispatch, new `renderLyrics`, `renderSong` Lyrics preview
+row, new state `lastLyricsId`/`lyricsEditing`), `style.css` (`.lyricsrow`, `.lyricsview`,
+`.lyricsempty`, `.lyrnote`, `textarea.lyricsedit`, `.lyricsbtnrow`, `.lyricscancel`),
+`sw.js` (cache **v46 -> v47**). `index.html` unchanged.

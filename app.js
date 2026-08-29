@@ -172,6 +172,7 @@ let profGen=0;           // generation token; a superseded in-flight fetch is di
 let isAdmin=(()=>{try{return localStorage.getItem("cf-admin")==="1";}catch(e){return false;}})();
 let detachNotes=null, currentNotes=[], notesSongId=null, lastSong=null;
 let myPersonalNotes={};  // songId -> text, populated by the notes listener, survives navigation
+let lastLyricsId=null, lyricsEditing=false;  // full-page lyrics view state (shared/wiki-style, lives on the song doc)
 
 /* Lightweight toast (e.g. "Currently Learning is full"). */
 let toastTimer=null;
@@ -425,7 +426,7 @@ function go(hash){ location.hash=hash; }
 function debounce(fn,ms){ let t; return function(...a){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,a),ms); }; }
 function route(){
   const h=location.hash.replace(/^#/,"")||"/"; const parts=h.split("/").filter(Boolean);
-  if(parts[0]==="song") return {view:"song",id:parts[1]};
+  if(parts[0]==="song") return parts[2]==="lyrics" ? {view:"lyrics",id:parts[1]} : {view:"song",id:parts[1]};
   if(parts[0]==="people") return {view:"people"};
   if(parts[0]==="spin") return {view:"spin"};
   if(parts[0]==="scales") return {view:"scales"};
@@ -662,6 +663,11 @@ function renderSong(id){
     <div class="section"><h3>Listen</h3><div class="listen">
       <a class="spotify" href="${L.spotify}" target="_blank" rel="noopener">Spotify</a>
       <a class="apple" href="${L.apple}" target="_blank" rel="noopener">Apple Music</a></div></div>
+    <div class="section"><h3>Lyrics</h3>
+      <button class="lyricsrow" data-go="/song/${id}/lyrics">
+        <span class="lyricsrow-text">${s.lyrics?esc(s.lyrics.trim().slice(0,90).replace(/\s+/g," "))+(s.lyrics.trim().length>90?"&hellip;":""):"No lyrics yet &mdash; tap to add"}</span>
+        <span class="lyricsrow-chev">&rsaquo;</span>
+      </button></div>
     <div class="section"><h3>My lists</h3><div class="mystatus">
       <button class="sbtn todo ${e.status==='todo'?'on':''}" data-set="todo" data-id="${id}">To-Do</button>
       <button class="sbtn learning ${e.status==='learning'?'on':''}" data-set="learning" data-id="${id}">Currently Learning</button>
@@ -739,6 +745,62 @@ function renderSong(id){
   $("delsong").onclick=async()=>{ const b=$("delsong");
     if(b.dataset.confirm){ await deleteSong(id); go("/"); }
     else{ b.dataset.confirm="1"; b.textContent="Tap again to permanently delete"; setTimeout(()=>{const x=$("delsong");if(x){delete x.dataset.confirm;x.textContent="Delete this song from the songbook";}},3000); } };
+}
+
+// Full-page lyrics view. Lyrics live as a single `lyrics` field on the shared song doc
+// (same doc/path that title, artist, and genres already live on and are edited through
+// via saveSongFields), so no new collection or security rule is needed — anyone can edit
+// them and everyone sees the same copy. Two modes: a read-friendly display (default) and
+// an edit textarea, toggled by lyricsEditing. The edit textarea uses the same capture/
+// restore guard as the personal-notes and difficulty-note fields: a background song-doc
+// change (someone else saving lyrics, a genre edit, etc.) triggers a full render() while
+// you're mid-edit, and without this guard that would wipe your in-progress typing.
+function renderLyrics(id){
+  const s=songsMap[id];
+  if(!s){ root.innerHTML=chrome(`<button class="back" data-go="/">&larr; Back</button><div class="empty"><div class="big">Song not found</div>It may have been removed.</div>`,"home"); return; }
+  if(lastLyricsId!==id) lyricsEditing=false;   // arriving at a different song's lyrics always starts in view mode
+  const text=s.lyrics||"";
+  const editing=lyricsEditing;
+  const sameSong=lastLyricsId===id;
+  const _cap=(sameSong&&editing)?(()=>{ const el=$("lyricsedit"); return el?{val:el.value,focus:document.activeElement===el,
+    sel:typeof el.selectionStart==='number'?el.selectionStart:null}:null; })():null;
+  const wrapScroll=sameSong?(()=>{const w=document.querySelector(".wrap");return w?w.scrollTop:0;})():0;
+  const body=editing
+    ? `<textarea class="notes lyricsedit" id="lyricsedit" placeholder="Paste or type the lyrics here&hellip;">${esc(text)}</textarea>
+       <div class="lyricsbtnrow"><button class="savenote" id="savelyrics">Save lyrics</button><button class="lyricscancel" id="cancellyrics">Cancel</button><span class="savedmsg" id="lyricssaved"></span></div>`
+    : (text
+        ? `<div class="lyricsview">${esc(text).replace(/\n/g,"<br>")}</div><button class="edit-pencil" id="editlyrics">Edit lyrics</button>`
+        : `<div class="lyricsempty">No lyrics yet.</div><button class="savenote" id="editlyrics">Add lyrics</button>`);
+  const inner=`
+    <button class="back" data-back="1">&larr; ${esc(s.title)}</button>
+    <div class="dhead">
+      <div class="dtitle">${esc(s.title)}</div><div class="dartist">${esc(s.artist)}</div>
+    </div>
+    <div class="section">
+      <h3>Lyrics</h3>
+      <p class="lyrnote">Shared with everyone &mdash; anyone can edit these.</p>
+      ${body}
+    </div>`;
+  root.innerHTML=chrome(inner,"home");
+  if(sameSong){ const w=document.querySelector(".wrap"); if(w) w.scrollTop=wrapScroll; }
+  if(editing){
+    const el=$("lyricsedit");
+    if(_cap&&(_cap.focus||_cap.val!=="")){
+      el.value=_cap.val;
+      if(_cap.focus){ el.focus(); if(_cap.sel!=null){ try{el.setSelectionRange(_cap.sel,_cap.sel);}catch(err){} } }
+    } else if(!_cap){
+      el.focus(); const L=el.value.length; try{el.setSelectionRange(L,L);}catch(err){}
+    }
+    $("savelyrics").onclick=async()=>{
+      const b=$("savelyrics"); b.disabled=true; b.textContent="Saving\u2026";
+      await saveSongFields(id,{lyrics:el.value.trim()});
+      lyricsEditing=false; render();
+    };
+    $("cancellyrics").onclick=()=>{ lyricsEditing=false; render(); };
+  } else {
+    const eb=$("editlyrics"); if(eb) eb.onclick=()=>{ lyricsEditing=true; render(); };
+  }
+  lastLyricsId=id;
 }
 
 // Compact row for the "Starred" favourites band at the top of a personal profile.
@@ -1350,6 +1412,7 @@ function render(){
   // spin page still shows the song you last landed on (see renderSpin restore block).
   if(r.view==="home") renderHome();
   else if(r.view==="song") renderSong(r.id);
+  else if(r.view==="lyrics") renderLyrics(r.id);
   else if(r.view==="people") renderPeople();
   else if(r.view==="spin") renderSpin();
   else if(r.view==="scales") renderScales();
