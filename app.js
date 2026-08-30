@@ -755,9 +755,19 @@ function renderSong(id){
 // restore guard as the personal-notes and difficulty-note fields: a background song-doc
 // change (someone else saving lyrics, a genre edit, etc.) triggers a full render() while
 // you're mid-edit, and without this guard that would wipe your in-progress typing.
-// Splits lyrics on blank lines into paragraphs (verses/choruses), so paragraph spacing can be
-// tuned independently of the font's line-height — a single blank line in the source becomes one
-// paragraph break, not a variable-height gap that scales with line-height like a bare <br><br> would.
+// Per-device lyrics text size: stored in localStorage (not Firestore) since this is a personal
+// reading preference, not shared song data — it applies to every song's lyrics on this phone
+// until changed again here, same key-naming convention as cf-name/cf-color/cf-admin.
+const LYRICS_FS_DEFAULT=15.5, LYRICS_FS_MIN=11, LYRICS_FS_MAX=22, LYRICS_FS_STEP=1;
+function getLyricsFontSize(){
+  try{ const v=parseFloat(localStorage.getItem("cf-lyrics-fs")); if(!isNaN(v)) return Math.min(LYRICS_FS_MAX,Math.max(LYRICS_FS_MIN,v)); }catch(e){}
+  return LYRICS_FS_DEFAULT;
+}
+function setLyricsFontSize(v){
+  const c=Math.min(LYRICS_FS_MAX,Math.max(LYRICS_FS_MIN,v));
+  try{ localStorage.setItem("cf-lyrics-fs",String(c)); }catch(e){}
+  return c;
+}
 function formatLyrics(text){
   return text.trim().split(/\n{2,}/).map(para=>`<p>${esc(para).replace(/\n/g,"<br>")}</p>`).join("");
 }
@@ -768,14 +778,19 @@ function renderLyrics(id){
   const text=s.lyrics||"";
   const editing=lyricsEditing;
   const sameSong=lastLyricsId===id;
+  const fs=getLyricsFontSize();
   const _cap=(sameSong&&editing)?(()=>{ const el=$("lyricsedit"); return el?{val:el.value,focus:document.activeElement===el,
     sel:typeof el.selectionStart==='number'?el.selectionStart:null}:null; })():null;
   const wrapScroll=sameSong?(()=>{const w=document.querySelector(".wrap");return w?w.scrollTop:0;})():0;
+  const sizeRow=`<div class="lyricssize"><span class="lyricssize-lbl">Text size</span><div class="lyricssize-btns">
+      <button class="lyricssizebtn" id="lyricsminus" aria-label="Smaller text"${fs<=LYRICS_FS_MIN?" disabled":""}>A&minus;</button>
+      <button class="lyricssizebtn" id="lyricsplus" aria-label="Larger text"${fs>=LYRICS_FS_MAX?" disabled":""}>A&plus;</button>
+    </div></div>`;
   const body=editing
     ? `<textarea class="notes lyricsedit" id="lyricsedit" placeholder="Paste or type the lyrics here&hellip;">${esc(text)}</textarea>
        <div class="lyricsbtnrow"><button class="savenote" id="savelyrics">Save lyrics</button><button class="lyricscancel" id="cancellyrics">Cancel</button><span class="savedmsg" id="lyricssaved"></span></div>`
     : (text
-        ? `<div class="lyricsview">${formatLyrics(text)}</div><button class="edit-pencil" id="editlyrics">Edit lyrics</button>`
+        ? `${sizeRow}<div class="lyricsview" style="font-size:${fs}px">${formatLyrics(text)}</div><button class="edit-pencil" id="editlyrics">Edit lyrics</button>`
         : `<div class="lyricsempty">No lyrics yet.</div><button class="savenote" id="editlyrics">Add lyrics</button>`);
   const inner=`
     <button class="back" data-back="1">&larr; ${esc(s.title)}</button>
@@ -805,6 +820,9 @@ function renderLyrics(id){
     $("cancellyrics").onclick=()=>{ lyricsEditing=false; render(); };
   } else {
     const eb=$("editlyrics"); if(eb) eb.onclick=()=>{ lyricsEditing=true; render(); };
+    const mb=$("lyricsminus"), pb=$("lyricsplus");
+    if(mb) mb.onclick=()=>{ setLyricsFontSize(getLyricsFontSize()-LYRICS_FS_STEP); render(); };
+    if(pb) pb.onclick=()=>{ setLyricsFontSize(getLyricsFontSize()+LYRICS_FS_STEP); render(); };
   }
   lastLyricsId=id;
 }

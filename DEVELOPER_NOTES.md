@@ -995,3 +995,33 @@ narrower `lyricssection` side padding from #38 are unchanged — just the text s
 after feedback that v49 went too far.
 
 **Files:** `style.css` (`.lyricsview`), `sw.js` (cache **v49 -> v50**).
+
+## 40. Lyrics text size: reverted default, added per-device A-/A+ controls (v51)
+
+Reverted the default lyrics reading font-size back to the original 15.5px (the size #36 shipped
+with, before #37-#39's back-and-forth shrinking). Line-height (1.4), paragraph gap (.4em), and the
+narrower `lyricssection` side padding stay as previously tuned — only the *size* reverts.
+
+On top of that, added manual **A−/A+** buttons above the lyrics text (view mode only) so each
+person can nudge the size up or down to their own taste, independent of the shared default:
+
+- `getLyricsFontSize()`/`setLyricsFontSize(v)` read/write a plain number of px to/from
+  `localStorage["cf-lyrics-fs"]`, clamped to 11–22px in steps of 1px, following the same
+  try/catch + `cf-` prefix convention as `cf-name`/`cf-color`/`cf-admin`. Falls back to the
+  15.5px default if unset or unparsable.
+- **This is a per-device preference, not per-song and not shared**: it's plain `localStorage`,
+  not a Firestore field, so it never syncs between people or between a person's own devices —
+  exactly the "sticks for just my phone, for every song, until I change it again" behavior asked
+  for. It deliberately does *not* go through the same doc/collection as the lyrics text itself.
+- The chosen size is applied via an inline `style="font-size:{fs}px"` on `.lyricsview` (rather
+  than a CSS variable) so a plain re-render is enough to pick up a change — `line-height` (unitless)
+  and the paragraph `em` margins scale with it automatically since `em`/unitless line-height are
+  relative to the element's own computed font-size.
+- Buttons disable at the 11px/22px clamp ends rather than silently doing nothing.
+- Only shown in view mode next to actual lyrics text (not on the empty state, not while editing —
+  the edit `textarea.lyricsedit` keeps its own fixed size, unaffected by this control).
+
+**Files:** `app.js` (new `LYRICS_FS_*` constants, `getLyricsFontSize`/`setLyricsFontSize`,
+`renderLyrics` size-row markup + button wiring), `style.css` (`.lyricsview` font-size now unset
+here/set inline, new `.lyricssize`/`.lyricssize-lbl`/`.lyricssize-btns`/`.lyricssizebtn`),
+`sw.js` (cache **v50 -> v51**).
