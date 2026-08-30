@@ -1025,3 +1025,10 @@ person can nudge the size up or down to their own taste, independent of the shar
 `renderLyrics` size-row markup + button wiring), `style.css` (`.lyricsview` font-size now unset
 here/set inline, new `.lyricssize`/`.lyricssize-lbl`/`.lyricssize-btns`/`.lyricssizebtn`),
 `sw.js` (cache **v50 -> v51**).
+
+## 41. Lyrics view: paragraph gap was too tight — bumped up (v52)
+
+`.lyricsview p` margin-bottom .4em -> 1em. Since it's an em value it still scales with each
+person's chosen text size from #40 (A-/A+), just with a bigger multiplier now.
+
+**Files:** `style.css` (`.lyricsview p`), `sw.js` (cache **v51 -> v52**).
