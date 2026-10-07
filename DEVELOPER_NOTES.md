@@ -7,8 +7,7 @@ can pick it back up quickly. Last updated at cache version **campfire-v29**.
 
 ## 1. What it is
 
-A mobile-first web app (PWA) for a group of friends to track guitar songs that are
-good for campfires. Anyone can browse/add songs to a shared list, keep their own
+A mobile-first web app (PWA) for a group of friends to track guitar songs. Anyone can browse/add songs to a shared list, keep their own
 "Currently Know" and "To-Do" lists, leave notes, see what everyone else knows, and
 spin a slot machine to pick what to play.
 
